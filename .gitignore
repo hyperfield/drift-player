@@ -1,0 +1,48 @@
+# Build artifacts
+/build/
+cmake-build*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+install_manifest.txt
+
+# Qt specific
+*.pro.user
+*.qbs.user
+*.qmlc
+*.jsc
+
+# Compiler intermediates
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.dll
+*.dylib
+*.so
+*.pch
+*.pdb
+*.ilk
+
+# Executables
+*.exe
+*.out
+*.app
+*.ipa
+
+# IDE/Editor metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific clutter
+.DS_Store
+Thumbs.db
+desktop.ini
