@@ -22,8 +22,8 @@ QT_BEGIN_MOC_NAMESPACE
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 struct qt_meta_stringdata_VideoBackgroundWidget_t {
-    const uint offsetsAndSize[24];
-    char stringdata0[150];
+    const uint offsetsAndSize[28];
+    char stringdata0[183];
 };
 #define QT_MOC_LITERAL(ofs, len) \
     uint(offsetof(qt_meta_stringdata_VideoBackgroundWidget_t, stringdata0) + ofs), len 
@@ -39,14 +39,17 @@ QT_MOC_LITERAL(69, 16), // "playbackFinished"
 QT_MOC_LITERAL(86, 15), // "positionChanged"
 QT_MOC_LITERAL(102, 8), // "position"
 QT_MOC_LITERAL(111, 8), // "duration"
-QT_MOC_LITERAL(120, 16), // "processMpvEvents"
-QT_MOC_LITERAL(137, 12) // "handleUpdate"
+QT_MOC_LITERAL(120, 15), // "blurModeChanged"
+QT_MOC_LITERAL(136, 16), // "shaderBlurActive"
+QT_MOC_LITERAL(153, 16), // "processMpvEvents"
+QT_MOC_LITERAL(170, 12) // "handleUpdate"
 
     },
     "VideoBackgroundWidget\0mediaLoaded\0\0"
     "path\0playbackStateChanged\0playing\0"
     "playbackFinished\0positionChanged\0"
-    "position\0duration\0processMpvEvents\0"
+    "position\0duration\0blurModeChanged\0"
+    "shaderBlurActive\0processMpvEvents\0"
     "handleUpdate"
 };
 #undef QT_MOC_LITERAL
@@ -57,28 +60,30 @@ static const uint qt_meta_data_VideoBackgroundWidget[] = {
       10,       // revision
        0,       // classname
        0,    0, // classinfo
-       6,   14, // methods
+       7,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
        0,       // flags
-       4,       // signalCount
+       5,       // signalCount
 
  // signals: name, argc, parameters, tag, flags, initial metatype offsets
-       1,    1,   50,    2, 0x06,    1 /* Public */,
-       4,    1,   53,    2, 0x06,    3 /* Public */,
-       6,    0,   56,    2, 0x06,    5 /* Public */,
-       7,    2,   57,    2, 0x06,    6 /* Public */,
+       1,    1,   56,    2, 0x06,    1 /* Public */,
+       4,    1,   59,    2, 0x06,    3 /* Public */,
+       6,    0,   62,    2, 0x06,    5 /* Public */,
+       7,    2,   63,    2, 0x06,    6 /* Public */,
+      10,    1,   68,    2, 0x06,    9 /* Public */,
 
  // slots: name, argc, parameters, tag, flags, initial metatype offsets
-      10,    0,   62,    2, 0x08,    9 /* Private */,
-      11,    0,   63,    2, 0x08,   10 /* Private */,
+      12,    0,   71,    2, 0x08,   11 /* Private */,
+      13,    0,   72,    2, 0x08,   12 /* Private */,
 
  // signals: parameters
     QMetaType::Void, QMetaType::QString,    3,
     QMetaType::Void, QMetaType::Bool,    5,
     QMetaType::Void,
     QMetaType::Void, QMetaType::Double, QMetaType::Double,    8,    9,
+    QMetaType::Void, QMetaType::Bool,   11,
 
  // slots: parameters
     QMetaType::Void,
@@ -97,8 +102,9 @@ void VideoBackgroundWidget::qt_static_metacall(QObject *_o, QMetaObject::Call _c
         case 1: _t->playbackStateChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
         case 2: _t->playbackFinished(); break;
         case 3: _t->positionChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
-        case 4: _t->processMpvEvents(); break;
-        case 5: _t->handleUpdate(); break;
+        case 4: _t->blurModeChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 5: _t->processMpvEvents(); break;
+        case 6: _t->handleUpdate(); break;
         default: ;
         }
     } else if (_c == QMetaObject::IndexOfMethod) {
@@ -131,6 +137,13 @@ void VideoBackgroundWidget::qt_static_metacall(QObject *_o, QMetaObject::Call _c
                 return;
             }
         }
+        {
+            using _t = void (VideoBackgroundWidget::*)(bool );
+            if (*reinterpret_cast<_t *>(_a[1]) == static_cast<_t>(&VideoBackgroundWidget::blurModeChanged)) {
+                *result = 4;
+                return;
+            }
+        }
     }
 }
 
@@ -141,7 +154,7 @@ const QMetaObject VideoBackgroundWidget::staticMetaObject = { {
     qt_static_metacall,
     nullptr,
 qt_incomplete_metaTypeArray<qt_meta_stringdata_VideoBackgroundWidget_t
-, QtPrivate::TypeAndForceComplete<VideoBackgroundWidget, std::true_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<const QString &, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<bool, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<double, std::false_type>, QtPrivate::TypeAndForceComplete<double, std::false_type>
+, QtPrivate::TypeAndForceComplete<VideoBackgroundWidget, std::true_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<const QString &, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<bool, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<double, std::false_type>, QtPrivate::TypeAndForceComplete<double, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<bool, std::false_type>
 , QtPrivate::TypeAndForceComplete<void, std::false_type>, QtPrivate::TypeAndForceComplete<void, std::false_type>
 
 
@@ -171,13 +184,13 @@ int VideoBackgroundWidget::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 6)
+        if (_id < 7)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 6;
+        _id -= 7;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 6)
+        if (_id < 7)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 6;
+        _id -= 7;
     }
     return _id;
 }
@@ -207,6 +220,13 @@ void VideoBackgroundWidget::positionChanged(double _t1, double _t2)
 {
     void *_a[] = { nullptr, const_cast<void*>(reinterpret_cast<const void*>(std::addressof(_t1))), const_cast<void*>(reinterpret_cast<const void*>(std::addressof(_t2))) };
     QMetaObject::activate(this, &staticMetaObject, 3, _a);
+}
+
+// SIGNAL 4
+void VideoBackgroundWidget::blurModeChanged(bool _t1)
+{
+    void *_a[] = { nullptr, const_cast<void*>(reinterpret_cast<const void*>(std::addressof(_t1))) };
+    QMetaObject::activate(this, &staticMetaObject, 4, _a);
 }
 QT_WARNING_POP
 QT_END_MOC_NAMESPACE

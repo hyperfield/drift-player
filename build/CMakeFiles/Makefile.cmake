@@ -158,12 +158,12 @@ set(CMAKE_MAKEFILE_OUTPUTS
 # Byproducts of CMake generate step:
 set(CMAKE_MAKEFILE_PRODUCTS
   "CMakeFiles/CMakeDirectoryInformation.cmake"
-  "src/CMakeFiles/bvplayer_autogen.dir/AutogenInfo.json"
+  "src/CMakeFiles/drift_player_autogen.dir/AutogenInfo.json"
   "src/CMakeFiles/CMakeDirectoryInformation.cmake"
   )
 
 # Dependency information for all targets:
 set(CMAKE_DEPEND_INFO_FILES
-  "src/CMakeFiles/bvplayer.dir/DependInfo.cmake"
-  "src/CMakeFiles/bvplayer_autogen.dir/DependInfo.cmake"
+  "src/CMakeFiles/drift_player.dir/DependInfo.cmake"
+  "src/CMakeFiles/drift_player_autogen.dir/DependInfo.cmake"
   )

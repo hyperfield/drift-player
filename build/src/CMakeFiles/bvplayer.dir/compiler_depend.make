@@ -368,12 +368,14 @@ src/CMakeFiles/bvplayer.dir/MainWindow.cpp.o: ../src/MainWindow.cpp \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qkeysequence.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qicon.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QSet \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QSettings \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qsettings.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qvariant.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qmap.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata_impl.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qtextstream.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qstringconverter.h \
@@ -407,6 +409,7 @@ src/CMakeFiles/bvplayer.dir/MainWindow.cpp.o: ../src/MainWindow.cpp \
   /usr/include/x86_64-linux-gnu/qt6/QtOpenGLWidgets/qtopenglwidgetsglobal.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qwidget.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QScopedPointer \
   /usr/include/mpv/client.h \
   /usr/include/mpv/render_gl.h \
   /usr/include/mpv/render.h \
@@ -449,8 +452,7 @@ src/CMakeFiles/bvplayer.dir/MainWindow.cpp.o: ../src/MainWindow.cpp \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QSizeF \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/QTransform \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qtransform.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QFileDialog \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qfiledialog.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QDir \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qdir.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qfile.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qfiledevice.h \
@@ -489,6 +491,9 @@ src/CMakeFiles/bvplayer.dir/MainWindow.cpp.o: ../src/MainWindow.cpp \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QFileDialog \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qfiledialog.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdir.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialog.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QFileInfo \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
@@ -537,6 +542,8 @@ src/CMakeFiles/bvplayer.dir/MainWindow.cpp.o: ../src/MainWindow.cpp \
   /usr/include/c++/11/bits/random.tcc \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QEasingCurve \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qeasingcurve.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QElapsedTimer \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qelapsedtimer.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QSlider \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qslider.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QSize \
@@ -550,7 +557,12 @@ src/CMakeFiles/bvplayer.dir/MainWindow.cpp.o: ../src/MainWindow.cpp \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtoolbutton.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QVBoxLayout \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QSignalBlocker \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget \
+  ../third_party/spdlog/include/spdlog/spdlog.h \
+  /usr/include/c++/11/iostream \
+  /usr/include/c++/11/mutex \
+  /usr/include/c++/11/bits/std_mutex.h \
+  /usr/include/c++/11/bits/unique_lock.h
 
 src/CMakeFiles/bvplayer.dir/VideoBackgroundWidget.cpp.o: ../src/VideoBackgroundWidget.cpp \
   /usr/include/stdc-predef.h \
@@ -943,16 +955,15 @@ src/CMakeFiles/bvplayer.dir/VideoBackgroundWidget.cpp.o: ../src/VideoBackgroundW
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qcursor.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qbitmap.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qkeysequence.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTimer \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qbasictimer.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QScopedPointer \
   /usr/include/mpv/client.h \
   /usr/include/mpv/render_gl.h \
   /usr/include/mpv/render.h \
   /usr/include/mpv/client.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QByteArray \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qbytearray.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QFile \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QDir \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdir.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qfile.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qfiledevice.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qiodevice.h \
@@ -988,27 +999,54 @@ src/CMakeFiles/bvplayer.dir/VideoBackgroundWidget.cpp.o: ../src/VideoBackgroundW
   /usr/include/c++/11/codecvt \
   /usr/include/c++/11/bits/fs_dir.h \
   /usr/include/c++/11/bits/fs_ops.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QFileInfo \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfile.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qlocale.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QFile \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfile.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QFileInfo \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QMetaObject \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qobjectdefs.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLBuffer \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglbuffer.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qtopenglglobal.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/QOpenGLContext \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qopenglcontext.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLFramebufferObject \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglframebufferobject.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLShaderProgram \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglshaderprogram.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qvector2d.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qvectornd.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qvector3d.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qvector4d.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qmatrix4x4.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qquaternion.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qgenericmatrix.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLVertexArrayObject \
+  /usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglvertexarrayobject.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/QPainter \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qpainter.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextoption.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qpen.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QStandardPaths \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qstandardpaths.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/QSurfaceFormat \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QSizePolicy \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qsizepolicy.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QSize \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qsize.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QtDebug \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
+  ../third_party/spdlog/include/spdlog/spdlog.h \
+  /usr/include/c++/11/iostream \
+  /usr/include/c++/11/mutex \
+  /usr/include/c++/11/bits/std_mutex.h \
+  /usr/include/c++/11/bits/unique_lock.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QString \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qstring.h
 
 src/CMakeFiles/bvplayer.dir/bvplayer_autogen/mocs_compilation.cpp.o: src/bvplayer_autogen/mocs_compilation.cpp \
   /usr/include/stdc-predef.h \
@@ -1378,12 +1416,14 @@ src/CMakeFiles/bvplayer.dir/bvplayer_autogen/mocs_compilation.cpp.o: src/bvplaye
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qkeysequence.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qicon.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QSet \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QSettings \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qsettings.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qvariant.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qmap.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata_impl.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qtextstream.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qstringconverter.h \
@@ -1418,6 +1458,7 @@ src/CMakeFiles/bvplayer.dir/bvplayer_autogen/mocs_compilation.cpp.o: src/bvplaye
   /usr/include/x86_64-linux-gnu/qt6/QtOpenGLWidgets/qtopenglwidgetsglobal.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qwidget.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QScopedPointer \
   /usr/include/mpv/client.h \
   /usr/include/mpv/render_gl.h \
   /usr/include/mpv/render.h \
@@ -1799,6 +1840,39 @@ src/CMakeFiles/bvplayer.dir/main.cpp.o: ../src/main.cpp \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qguiapplication_platform.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QDebug \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
+  ../third_party/spdlog/include/spdlog/spdlog.h \
+  /usr/include/c++/11/iomanip \
+  /usr/include/c++/11/locale \
+  /usr/include/c++/11/bits/locale_facets.h \
+  /usr/include/c++/11/cwctype \
+  /usr/include/wctype.h \
+  /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h \
+  /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_base.h \
+  /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_inline.h \
+  /usr/include/c++/11/bits/locale_facets.tcc \
+  /usr/include/c++/11/bits/locale_facets_nonio.h \
+  /usr/include/x86_64-linux-gnu/c++/11/bits/time_members.h \
+  /usr/include/x86_64-linux-gnu/c++/11/bits/messages_members.h \
+  /usr/include/libintl.h \
+  /usr/include/c++/11/bits/codecvt.h \
+  /usr/include/c++/11/bits/locale_facets_nonio.tcc \
+  /usr/include/c++/11/bits/locale_conv.h \
+  /usr/include/c++/11/bits/quoted_string.h \
+  /usr/include/c++/11/sstream \
+  /usr/include/c++/11/istream \
+  /usr/include/c++/11/ios \
+  /usr/include/c++/11/bits/basic_ios.h \
+  /usr/include/c++/11/bits/basic_ios.tcc \
+  /usr/include/c++/11/ostream \
+  /usr/include/c++/11/bits/ostream.tcc \
+  /usr/include/c++/11/bits/istream.tcc \
+  /usr/include/c++/11/bits/sstream.tcc \
+  /usr/include/c++/11/iostream \
+  /usr/include/c++/11/mutex \
+  /usr/include/c++/11/bits/std_mutex.h \
+  /usr/include/c++/11/bits/unique_lock.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QString \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qstring.h \
   ../include/MainWindow.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMainWindow \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmainwindow.h \
@@ -1812,13 +1886,13 @@ src/CMakeFiles/bvplayer.dir/main.cpp.o: ../src/main.cpp \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qkeysequence.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qicon.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QSet \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QSettings \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qsettings.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QTimer \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimer.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qbasictimer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QString \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qstring.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QVector \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qvector.h
 
@@ -1828,6 +1902,40 @@ src/CMakeFiles/bvplayer.dir/main.cpp.o: ../src/main.cpp \
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qinputmethod.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication_platform.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication.h:
+
+../src/main.cpp:
+
+src/bvplayer_autogen/mocs_compilation.cpp:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/QtDebug:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qstandardpaths.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/QStandardPaths:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglvertexarrayobject.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLVertexArrayObject:
+
+/usr/include/x86_64-linux-gnu/qt6/QtGui/qgenericmatrix.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtGui/qmatrix4x4.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtGui/qvector4d.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglshaderprogram.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLFramebufferObject:
+
+/usr/include/x86_64-linux-gnu/qt6/QtGui/QOpenGLContext:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qtopenglglobal.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglbuffer.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLBuffer:
 
 /usr/include/stdio.h:
 
@@ -1853,6 +1961,10 @@ src/CMakeFiles/bvplayer.dir/main.cpp.o: ../src/main.cpp \
 
 /usr/include/c++/11/tr1/legendre_function.tcc:
 
+src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
+
+/usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h:
+
 /usr/include/c++/11/bits/stl_bvector.h:
 
 /usr/include/c++/11/bits/fs_fwd.h:
@@ -1874,8 +1986,6 @@ src/CMakeFiles/bvplayer.dir/main.cpp.o: ../src/main.cpp \
 /usr/include/c++/11/pstl/glue_numeric_defs.h:
 
 /usr/include/c++/11/clocale:
-
-/usr/include/x86_64-linux-gnu/qt6/QtGui/qopenglext.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlayoutitem.h:
 
@@ -1923,8 +2033,6 @@ src/CMakeFiles/bvplayer.dir/main.cpp.o: ../src/main.cpp \
 
 /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgets-config.h:
 
-src/bvplayer_autogen/mocs_compilation.cpp:
-
 /usr/include/c++/11/tr1/riemann_zeta.tcc:
 
 /usr/include/c++/11/tr1/poly_hermite.tcc:
@@ -1965,6 +2073,8 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 
 /usr/include/x86_64-linux-gnu/bits/mathcalls-narrow.h:
 
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qelapsedtimer.h:
+
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qsurfaceformat.h:
 
 /usr/include/x86_64-linux-gnu/bits/mathcalls-helper-functions.h:
@@ -1987,7 +2097,11 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 
 /usr/include/c++/11/bits/atomic_lockfree_defines.h:
 
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/QOpenGLShaderProgram:
+
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qgenericatomic.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/QSet:
 
 /usr/include/x86_64-linux-gnu/c++/11/bits/gthr-default.h:
 
@@ -2006,6 +2120,8 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qsysinfo.h:
 
 /usr/include/c++/11/vector:
+
+/usr/include/x86_64-linux-gnu/qt6/QtGui/qvector3d.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/QVector:
 
@@ -2117,6 +2233,10 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 
 /usr/include/x86_64-linux-gnu/bits/types/clock_t.h:
 
+/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qapplication.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qsystemdetection.h:
+
 /usr/include/features.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractitemview.h:
@@ -2144,6 +2264,10 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qmetatype.h:
 
 /usr/include/c++/11/bits/enable_special_members.h:
+
+src/bvplayer_autogen/DGKZTCOIDE/moc_MainWindow.cpp:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qstringmatcher.h:
 
 /usr/include/c++/11/bits/codecvt.h:
 
@@ -2273,6 +2397,8 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 
 /usr/include/c++/11/bits/stl_tempbuf.h:
 
+/usr/include/c++/11/iostream:
+
 /usr/include/x86_64-linux-gnu/bits/uintn-identity.h:
 
 /usr/include/x86_64-linux-gnu/bits/iscanonical.h:
@@ -2305,6 +2431,8 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 
 /usr/include/c++/11/tr1/poly_laguerre.tcc:
 
+/usr/include/c++/11/bits/std_mutex.h:
+
 /usr/include/c++/11/bits/stl_iterator_base_types.h:
 
 /usr/include/c++/11/cstdlib:
@@ -2320,10 +2448,6 @@ src/bvplayer_autogen/mocs_compilation.cpp:
 /usr/include/c++/11/bits/stl_iterator.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qpaintdevice.h:
-
-/usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h:
-
-src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qatomic.h:
 
@@ -2435,6 +2559,8 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/c++/11/bits/uses_allocator.h:
 
+/usr/include/c++/11/bits/unique_lock.h:
+
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qcontainerfwd.h:
 
 /usr/include/c++/11/bits/functional_hash.h:
@@ -2455,6 +2581,10 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 ../src/MainWindow.cpp:
 
+/usr/include/x86_64-linux-gnu/qt6/QtGui/qquaternion.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtOpenGL/qopenglframebufferobject.h:
+
 /usr/include/c++/11/bits/algorithmfwd.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qscreen.h:
@@ -2462,10 +2592,6 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 /usr/include/c++/11/bits/cxxabi_forced.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qvector.h:
-
-/usr/include/x86_64-linux-gnu/qt6/QtCore/qsystemdetection.h:
-
-/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qapplication.h:
 
 /usr/include/c++/11/bits/hashtable.h:
 
@@ -2689,8 +2815,6 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qpixelformat.h:
 
-/usr/include/x86_64-linux-gnu/qt6/QtCore/QtDebug:
-
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qpolygon.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qregion.h:
@@ -2721,7 +2845,9 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qdir.h:
 
-/usr/include/x86_64-linux-gnu/qt6/QtCore/qvariant.h:
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h:
+
+/usr/include/c++/11/sstream:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h:
 
@@ -2729,11 +2855,9 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_base.h:
 
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qvariant.h:
+
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qtextstream.h:
-
-/usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h:
-
-/usr/include/c++/11/sstream:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/QTimer:
 
@@ -2759,8 +2883,6 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget:
 
-../src/main.cpp:
-
 /usr/include/mpv/client.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qitemselectionmodel.h:
@@ -2772,10 +2894,6 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qvalidator.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qregularexpression.h:
-
-/usr/include/x86_64-linux-gnu/qt6/QtCore/qcontainerinfo.h:
-
-/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qslider.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QFrame:
 
@@ -2818,6 +2936,8 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 /usr/include/x86_64-linux-gnu/qt6/QtCore/QEasingCurve:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/QSizeF:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/QDir:
 
 /usr/include/c++/11/cwctype:
 
@@ -2879,6 +2999,8 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QListWidgetItem:
 
+/usr/include/x86_64-linux-gnu/qt6/QtCore/QElapsedTimer:
+
 /usr/include/x86_64-linux-gnu/c++/11/bits/time_members.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qpainter.h:
@@ -2903,16 +3025,18 @@ src/bvplayer_autogen/DGKZTCOIDE/moc_VideoBackgroundWidget.cpp:
 
 /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QToolButton:
 
+/usr/include/x86_64-linux-gnu/qt6/QtGui/qopenglext.h:
+
+../third_party/spdlog/include/spdlog/spdlog.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtCore/qcontainerinfo.h:
+
+/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qslider.h:
+
+/usr/include/c++/11/mutex:
+
 /usr/include/x86_64-linux-gnu/qt6/QtCore/QByteArray:
 
 /usr/include/x86_64-linux-gnu/bits/uio_lim.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/QFile:
-
-/usr/include/x86_64-linux-gnu/qt6/QtGui/QOpenGLContext:
-
-/usr/include/x86_64-linux-gnu/qt6/QtCore/qstringmatcher.h:
-
-src/bvplayer_autogen/DGKZTCOIDE/moc_MainWindow.cpp:
-
-/usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication.h:

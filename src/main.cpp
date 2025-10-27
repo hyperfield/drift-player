@@ -3,6 +3,8 @@
 
 #include <clocale>
 
+#include <spdlog/spdlog.h>
+
 #include "MainWindow.h"
 
 namespace
@@ -10,17 +12,20 @@ namespace
 void enforceCLocale()
 {
     if (!std::setlocale(LC_NUMERIC, "C")) {
-        qWarning() << "Unable to set LC_NUMERIC to C";
+        spdlog::warn("Unable to set LC_NUMERIC to C");
     }
 }
 } // namespace
 
 int main(int argc, char *argv[])
 {
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+    spdlog::info("Drift Player starting up");
+
     enforceCLocale(); // ensure mpv sees C locale before Qt starts
 
     QApplication app(argc, argv);
-    QApplication::setApplicationName("BVPlayer");
+    QApplication::setApplicationName("Drift Player");
     QApplication::setOrganizationName("evoid");
 
     enforceCLocale(); // Qt may change it back; reapply
@@ -28,5 +33,7 @@ int main(int argc, char *argv[])
     MainWindow window;
     window.show();
 
-    return app.exec();
+    const int result = app.exec();
+    spdlog::info("Drift Player shutting down with code {}", result);
+    return result;
 }

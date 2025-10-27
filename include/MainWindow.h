@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QSet>
 #include <QSettings>
 #include <QTimer>
 #include <QString>
@@ -20,6 +21,7 @@ struct TrackEntry
 {
     QString title;
     QString filePath;
+    QString normalizedPath;
 };
 
 enum class RepeatMode
@@ -53,6 +55,7 @@ private slots:
     void handlePlaybackStateChanged(bool playing);
     void handlePlaybackFinished();
     void handleVolumeChanged(int value);
+    void handleBlurChanged(int value);
     void handleProgressSliderPressed();
     void handleProgressSliderReleased();
     void handleProgressSliderMoved(int value);
@@ -63,6 +66,8 @@ private:
     void loadSettings();
     void saveSettings();
     void addTrack(const QString &filePath);
+    void processSelectedFiles(const QStringList &files);
+    bool trackExists(const QString &filePath) const;
     void playTrack(int index);
     [[nodiscard]] int resolveNextIndex() const;
     [[nodiscard]] int resolvePreviousIndex() const;
@@ -74,6 +79,7 @@ private:
     bool handleFadeEvent(QObject *watched, QEvent *event, QWidget *container, QTimer &timer,
                          QGraphicsOpacityEffect *effect, QPropertyAnimation *animation);
     [[nodiscard]] bool isCursorInside(QWidget *widget) const;
+    [[nodiscard]] QString normalizedPathFor(const QString &filePath) const;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -86,6 +92,7 @@ private:
     QToolButton *m_shuffleButton = nullptr;
     QToolButton *m_repeatButton = nullptr;
     QSlider *m_volumeSlider = nullptr;
+    QSlider *m_blurSlider = nullptr;
     QLabel *m_titleLabel = nullptr;
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
@@ -108,4 +115,5 @@ private:
     QTimer m_progressFadeTimer;
     bool m_progressSliderPressed = false;
     double m_lastDuration = 0.0;
+    QSet<QString> m_knownPaths;
 };

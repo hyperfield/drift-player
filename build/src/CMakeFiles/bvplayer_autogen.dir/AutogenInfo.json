@@ -45,6 +45,7 @@
 	"MOC_INCLUDES" : 
 	[
 		"/home/evoid/projects/bvplayer/include",
+		"/home/evoid/projects/bvplayer/third_party/spdlog/include",
 		"/usr/include/x86_64-linux-gnu/qt6/QtCore",
 		"/usr/include/x86_64-linux-gnu/qt6",
 		"/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++",

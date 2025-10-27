@@ -117,39 +117,39 @@ depend:
 .PHONY : depend
 
 # Convenience name for target.
-src/CMakeFiles/bvplayer.dir/rule:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/bvplayer.dir/rule
-.PHONY : src/CMakeFiles/bvplayer.dir/rule
+src/CMakeFiles/drift_player.dir/rule:
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/drift_player.dir/rule
+.PHONY : src/CMakeFiles/drift_player.dir/rule
 
 # Convenience name for target.
-bvplayer: src/CMakeFiles/bvplayer.dir/rule
-.PHONY : bvplayer
+drift_player: src/CMakeFiles/drift_player.dir/rule
+.PHONY : drift_player
 
 # fast build rule for target.
-bvplayer/fast:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/build
-.PHONY : bvplayer/fast
+drift_player/fast:
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/build
+.PHONY : drift_player/fast
 
 # Convenience name for target.
-src/CMakeFiles/bvplayer_autogen.dir/rule:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/bvplayer_autogen.dir/rule
-.PHONY : src/CMakeFiles/bvplayer_autogen.dir/rule
+src/CMakeFiles/drift_player_autogen.dir/rule:
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/drift_player_autogen.dir/rule
+.PHONY : src/CMakeFiles/drift_player_autogen.dir/rule
 
 # Convenience name for target.
-bvplayer_autogen: src/CMakeFiles/bvplayer_autogen.dir/rule
-.PHONY : bvplayer_autogen
+drift_player_autogen: src/CMakeFiles/drift_player_autogen.dir/rule
+.PHONY : drift_player_autogen
 
 # fast build rule for target.
-bvplayer_autogen/fast:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer_autogen.dir/build.make src/CMakeFiles/bvplayer_autogen.dir/build
-.PHONY : bvplayer_autogen/fast
+drift_player_autogen/fast:
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player_autogen.dir/build.make src/CMakeFiles/drift_player_autogen.dir/build
+.PHONY : drift_player_autogen/fast
 
 MainWindow.o: MainWindow.cpp.o
 .PHONY : MainWindow.o
 
 # target to build an object file
 MainWindow.cpp.o:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/MainWindow.cpp.o
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/MainWindow.cpp.o
 .PHONY : MainWindow.cpp.o
 
 MainWindow.i: MainWindow.cpp.i
@@ -157,7 +157,7 @@ MainWindow.i: MainWindow.cpp.i
 
 # target to preprocess a source file
 MainWindow.cpp.i:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/MainWindow.cpp.i
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/MainWindow.cpp.i
 .PHONY : MainWindow.cpp.i
 
 MainWindow.s: MainWindow.cpp.s
@@ -165,7 +165,7 @@ MainWindow.s: MainWindow.cpp.s
 
 # target to generate assembly for a file
 MainWindow.cpp.s:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/MainWindow.cpp.s
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/MainWindow.cpp.s
 .PHONY : MainWindow.cpp.s
 
 VideoBackgroundWidget.o: VideoBackgroundWidget.cpp.o
@@ -173,7 +173,7 @@ VideoBackgroundWidget.o: VideoBackgroundWidget.cpp.o
 
 # target to build an object file
 VideoBackgroundWidget.cpp.o:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/VideoBackgroundWidget.cpp.o
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/VideoBackgroundWidget.cpp.o
 .PHONY : VideoBackgroundWidget.cpp.o
 
 VideoBackgroundWidget.i: VideoBackgroundWidget.cpp.i
@@ -181,7 +181,7 @@ VideoBackgroundWidget.i: VideoBackgroundWidget.cpp.i
 
 # target to preprocess a source file
 VideoBackgroundWidget.cpp.i:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/VideoBackgroundWidget.cpp.i
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/VideoBackgroundWidget.cpp.i
 .PHONY : VideoBackgroundWidget.cpp.i
 
 VideoBackgroundWidget.s: VideoBackgroundWidget.cpp.s
@@ -189,39 +189,39 @@ VideoBackgroundWidget.s: VideoBackgroundWidget.cpp.s
 
 # target to generate assembly for a file
 VideoBackgroundWidget.cpp.s:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/VideoBackgroundWidget.cpp.s
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/VideoBackgroundWidget.cpp.s
 .PHONY : VideoBackgroundWidget.cpp.s
 
-bvplayer_autogen/mocs_compilation.o: bvplayer_autogen/mocs_compilation.cpp.o
-.PHONY : bvplayer_autogen/mocs_compilation.o
+drift_player_autogen/mocs_compilation.o: drift_player_autogen/mocs_compilation.cpp.o
+.PHONY : drift_player_autogen/mocs_compilation.o
 
 # target to build an object file
-bvplayer_autogen/mocs_compilation.cpp.o:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/bvplayer_autogen/mocs_compilation.cpp.o
-.PHONY : bvplayer_autogen/mocs_compilation.cpp.o
+drift_player_autogen/mocs_compilation.cpp.o:
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/drift_player_autogen/mocs_compilation.cpp.o
+.PHONY : drift_player_autogen/mocs_compilation.cpp.o
 
-bvplayer_autogen/mocs_compilation.i: bvplayer_autogen/mocs_compilation.cpp.i
-.PHONY : bvplayer_autogen/mocs_compilation.i
+drift_player_autogen/mocs_compilation.i: drift_player_autogen/mocs_compilation.cpp.i
+.PHONY : drift_player_autogen/mocs_compilation.i
 
 # target to preprocess a source file
-bvplayer_autogen/mocs_compilation.cpp.i:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/bvplayer_autogen/mocs_compilation.cpp.i
-.PHONY : bvplayer_autogen/mocs_compilation.cpp.i
+drift_player_autogen/mocs_compilation.cpp.i:
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/drift_player_autogen/mocs_compilation.cpp.i
+.PHONY : drift_player_autogen/mocs_compilation.cpp.i
 
-bvplayer_autogen/mocs_compilation.s: bvplayer_autogen/mocs_compilation.cpp.s
-.PHONY : bvplayer_autogen/mocs_compilation.s
+drift_player_autogen/mocs_compilation.s: drift_player_autogen/mocs_compilation.cpp.s
+.PHONY : drift_player_autogen/mocs_compilation.s
 
 # target to generate assembly for a file
-bvplayer_autogen/mocs_compilation.cpp.s:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/bvplayer_autogen/mocs_compilation.cpp.s
-.PHONY : bvplayer_autogen/mocs_compilation.cpp.s
+drift_player_autogen/mocs_compilation.cpp.s:
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/drift_player_autogen/mocs_compilation.cpp.s
+.PHONY : drift_player_autogen/mocs_compilation.cpp.s
 
 main.o: main.cpp.o
 .PHONY : main.o
 
 # target to build an object file
 main.cpp.o:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/main.cpp.o
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/main.cpp.o
 .PHONY : main.cpp.o
 
 main.i: main.cpp.i
@@ -229,7 +229,7 @@ main.i: main.cpp.i
 
 # target to preprocess a source file
 main.cpp.i:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/main.cpp.i
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/main.cpp.i
 .PHONY : main.cpp.i
 
 main.s: main.cpp.s
@@ -237,7 +237,7 @@ main.s: main.cpp.s
 
 # target to generate assembly for a file
 main.cpp.s:
-	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/main.cpp.s
+	cd /home/evoid/projects/bvplayer/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/main.cpp.s
 .PHONY : main.cpp.s
 
 # Help Target
@@ -248,17 +248,17 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... bvplayer_autogen"
-	@echo "... bvplayer"
+	@echo "... drift_player_autogen"
+	@echo "... drift_player"
 	@echo "... MainWindow.o"
 	@echo "... MainWindow.i"
 	@echo "... MainWindow.s"
 	@echo "... VideoBackgroundWidget.o"
 	@echo "... VideoBackgroundWidget.i"
 	@echo "... VideoBackgroundWidget.s"
-	@echo "... bvplayer_autogen/mocs_compilation.o"
-	@echo "... bvplayer_autogen/mocs_compilation.i"
-	@echo "... bvplayer_autogen/mocs_compilation.s"
+	@echo "... drift_player_autogen/mocs_compilation.o"
+	@echo "... drift_player_autogen/mocs_compilation.i"
+	@echo "... drift_player_autogen/mocs_compilation.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"

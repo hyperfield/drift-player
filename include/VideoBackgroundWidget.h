@@ -2,12 +2,18 @@
 
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
-#include <QTimer>
+#include <QScopedPointer>
+#include <memory>
 
 extern "C" {
 #include <mpv/client.h>
 #include <mpv/render_gl.h>
 }
+
+class QOpenGLBuffer;
+class QOpenGLFramebufferObject;
+class QOpenGLShaderProgram;
+class QOpenGLVertexArrayObject;
 
 class VideoBackgroundWidget : public QOpenGLWidget, protected QOpenGLFunctions
 {
@@ -22,6 +28,8 @@ public:
     void pause();
     void setPaused(bool paused);
     void setVolume(int volume);
+    void setBlurAmount(float amount);
+    float blurAmount() const;
     void seek(double seconds);
 
     [[nodiscard]] bool hasMedia() const;
@@ -34,6 +42,7 @@ signals:
     void playbackStateChanged(bool playing);
     void playbackFinished();
     void positionChanged(double position, double duration);
+    void blurModeChanged(bool shaderBlurActive);
 
 protected:
     void initializeGL() override;
@@ -46,20 +55,44 @@ private slots:
 
 private:
     static void onMpvUpdate(void *ctx);
+    static void onMpvWakeup(void *ctx);
     static void *getMpvProcAddress(void *ctx, const char *name);
 
     void initializeMpv();
     void releaseMpv();
     void handleMpvEvent(mpv_event *event);
     void scheduleUpdate();
+    void initializeBlurResources();
+    void releaseBlurResources();
+    void ensureFramebuffers();
+    void renderBlurPass();
+    void ensureVertexState();
+    void selectBlurStrategy();
+    void updateHardwareLogging();
+    bool queryHardwareDecoding(bool *known = nullptr) const;
+    bool ensureMpvShaderFile(float radius);
+    void applyMpvShader();
+    void removeMpvShader();
 
     mpv_handle *m_mpv = nullptr;
     mpv_render_context *m_mpvRender = nullptr;
-    QTimer m_eventTimer;
     QString m_currentPath;
     bool m_hasMedia = false;
     bool m_isPaused = true;
     bool m_renderInitialized = false;
     double m_duration = 0.0;
     double m_position = 0.0;
+    std::unique_ptr<QOpenGLFramebufferObject> m_sourceFbo;
+    std::unique_ptr<QOpenGLFramebufferObject> m_blurFbo;
+    std::unique_ptr<QOpenGLShaderProgram> m_blurProgramHorizontal;
+    std::unique_ptr<QOpenGLShaderProgram> m_blurProgramVertical;
+    std::unique_ptr<QOpenGLBuffer> m_fullscreenVbo;
+    std::unique_ptr<QOpenGLVertexArrayObject> m_fullscreenVao;
+    bool m_blurResourcesReady = false;
+    float m_blurAmount = 0.7f;
+    bool m_useShaderBlur = true;
+    bool m_hwdecKnown = false;
+    bool m_lastHwdecState = false;
+    QString m_mpvShaderPath;
+    bool m_mpvShaderActive = false;
 };

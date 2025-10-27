@@ -4,6 +4,7 @@
 
 #include <QAbstractItemView>
 #include <QCloseEvent>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QCursor>
@@ -20,6 +21,7 @@
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QEasingCurve>
+#include <QElapsedTimer>
 #include <QSlider>
 #include <QSize>
 #include <QSizePolicy>
@@ -32,10 +34,12 @@
 #include <QWidget>
 #include <cmath>
 #include <algorithm>
+#include <spdlog/spdlog.h>
 
 namespace
 {
 constexpr int kDefaultVolume = 60;
+constexpr int kDefaultBlur = 70;
 constexpr qreal kInteractiveActiveOpacity = 1.0;
 constexpr qreal kInteractiveIdleOpacity = 0.55;
 constexpr int kInteractiveFadeDelayMs = 2000;
@@ -78,7 +82,7 @@ QString formatTime(double seconds)
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , m_settings("evoid", "BVPlayer")
+    , m_settings("evoid", "Drift Player")
 {
     resize(980, 640);
     setMinimumSize(720, 460);
@@ -100,23 +104,26 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::handleAddMedia()
 {
-    const QStringList files = QFileDialog::getOpenFileNames(
-        this,
-        tr("Add Media"),
-        QString(),
-        tr("Media files (*.mp4 *.mkv *.mov *.mp3 *.flac *.wav);;All files (*.*)")
-    );
-
-    if (files.isEmpty()) {
-        return;
+    const bool wasPlaying = m_videoWidget && m_videoWidget->hasMedia() && !m_videoWidget->isPaused();
+    if (wasPlaying) {
+        spdlog::info("Pausing playback for Add Media dialog");
+        m_videoWidget->pause();
     }
 
-    for (const QString &file : files) {
-        addTrack(file);
+    const QString filter = tr("Media files (*.mp4 *.mkv *.mov *.mp3 *.flac *.wav);;All files (*.*)");
+    spdlog::info("Opening modal Add Media dialog");
+    const QStringList files = QFileDialog::getOpenFileNames(this, tr("Add Media"), QString(), filter);
+
+    if (wasPlaying) {
+        spdlog::info("Resuming playback after Add Media dialog");
+        m_videoWidget->play();
     }
 
-    if (m_currentIndex == -1 && !m_tracks.isEmpty()) {
-        playTrack(0);
+    if (!files.isEmpty()) {
+        spdlog::info("Add Media selection received: {} entries", files.size());
+        processSelectedFiles(files);
+    } else {
+        spdlog::info("Add Media dialog dismissed without selection");
     }
 }
 
@@ -204,6 +211,13 @@ void MainWindow::handlePlaybackFinished()
 void MainWindow::handleVolumeChanged(int value)
 {
     m_videoWidget->setVolume(value);
+}
+
+void MainWindow::handleBlurChanged(int value)
+{
+    if (m_videoWidget) {
+        m_videoWidget->setBlurAmount(static_cast<float>(value) / 100.0f);
+    }
 }
 
 void MainWindow::handleProgressSliderPressed()
@@ -559,6 +573,40 @@ void MainWindow::setupUi()
     m_shuffleButton->setStyleSheet(textButtonStyle);
     m_repeatButton->setStyleSheet(textButtonStyle);
 
+    m_blurSlider = new QSlider(Qt::Horizontal, m_controlsContainer);
+    m_blurSlider->setRange(0, 100);
+    m_blurSlider->setValue(kDefaultBlur);
+    m_blurSlider->setFixedWidth(160);
+    m_blurSlider->setCursor(Qt::PointingHandCursor);
+    m_blurSlider->setToolTip(tr("Background blur"));
+    m_blurSlider->setStyleSheet(R"(
+        QSlider {
+            height: 18px;
+        }
+        QSlider::groove:horizontal {
+            background: rgba(255, 255, 255, 28);
+            border-radius: 3px;
+            height: 4px;
+        }
+        QSlider::sub-page:horizontal {
+            background: rgba(160, 200, 255, 140);
+            border-radius: 3px;
+        }
+        QSlider::add-page:horizontal {
+            background: rgba(255, 255, 255, 18);
+            border-radius: 3px;
+        }
+        QSlider::handle:horizontal {
+            background: rgba(255, 255, 255, 230);
+            width: 16px;
+            margin: -6px 0;
+            border-radius: 8px;
+        }
+        QSlider::handle:horizontal:hover {
+            background: rgba(255, 255, 255, 255);
+        }
+    )");
+
     m_volumeSlider = new QSlider(Qt::Horizontal, m_controlsContainer);
     m_volumeSlider->setRange(0, 100);
     m_volumeSlider->setValue(kDefaultVolume);
@@ -624,6 +672,11 @@ void MainWindow::setupUi()
     buttonsLayout->addWidget(m_shuffleButton);
     buttonsLayout->addWidget(m_repeatButton);
     buttonsLayout->addSpacing(20);
+    auto *blurLabel = new QLabel(tr("Blur"), m_controlsContainer);
+    blurLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
+    buttonsLayout->addWidget(blurLabel);
+    buttonsLayout->addWidget(m_blurSlider);
+    buttonsLayout->addSpacing(12);
     auto *volumeLabel = new QLabel(tr("Volume"), m_controlsContainer);
     volumeLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
     buttonsLayout->addWidget(volumeLabel);
@@ -678,6 +731,7 @@ void MainWindow::setupUi()
     connect(m_shuffleButton, &QToolButton::clicked, this, &MainWindow::handleShuffleToggled);
     connect(m_repeatButton, &QToolButton::clicked, this, &MainWindow::handleRepeatMode);
     connect(m_volumeSlider, &QSlider::valueChanged, this, &MainWindow::handleVolumeChanged);
+    connect(m_blurSlider, &QSlider::valueChanged, this, &MainWindow::handleBlurChanged);
     connect(m_progressSlider, &QSlider::sliderPressed, this, &MainWindow::handleProgressSliderPressed);
     connect(m_progressSlider, &QSlider::sliderReleased, this, &MainWindow::handleProgressSliderReleased);
     connect(m_progressSlider, &QSlider::sliderMoved, this, &MainWindow::handleProgressSliderMoved);
@@ -685,6 +739,14 @@ void MainWindow::setupUi()
     connect(m_videoWidget, &VideoBackgroundWidget::playbackStateChanged, this, &MainWindow::handlePlaybackStateChanged);
     connect(m_videoWidget, &VideoBackgroundWidget::playbackFinished, this, &MainWindow::handlePlaybackFinished);
     connect(m_videoWidget, &VideoBackgroundWidget::positionChanged, this, &MainWindow::handlePositionChanged);
+    connect(m_videoWidget, &VideoBackgroundWidget::blurModeChanged, this, [this](bool shaderActive) {
+        if (m_blurSlider) {
+            m_blurSlider->setEnabled(shaderActive);
+            m_blurSlider->setToolTip(shaderActive
+                                          ? tr("Background blur")
+                                          : tr("Blur handled by decoder"));
+        }
+    });
 
     m_playlistFadeTimer.start(kInteractiveFadeDelayMs);
     m_controlsFadeTimer.start(kInteractiveFadeDelayMs);
@@ -704,6 +766,14 @@ void MainWindow::loadSettings()
     const int repeat = m_settings.value("playback/repeat", static_cast<int>(RepeatMode::None)).toInt();
     m_repeatMode = static_cast<RepeatMode>(repeat);
     updateRepeatButton();
+
+    const int blur = m_settings.value("visual/blur", kDefaultBlur).toInt();
+    if (m_blurSlider) {
+        m_blurSlider->setValue(blur);
+    }
+    if (m_videoWidget) {
+        m_videoWidget->setBlurAmount(static_cast<float>(blur) / 100.0f);
+    }
     updateTransportAvailability();
 }
 
@@ -712,33 +782,79 @@ void MainWindow::saveSettings()
     m_settings.setValue("audio/volume", m_volumeSlider->value());
     m_settings.setValue("playback/shuffle", m_shuffleEnabled);
     m_settings.setValue("playback/repeat", static_cast<int>(m_repeatMode));
+    if (m_blurSlider) {
+        m_settings.setValue("visual/blur", m_blurSlider->value());
+    }
     m_settings.sync();
 }
 
 void MainWindow::addTrack(const QString &filePath)
 {
     if (filePath.isEmpty()) {
+        spdlog::warn("addTrack called with empty path");
         return;
     }
 
-    TrackEntry entry{displayNameForFile(filePath), filePath};
+    const QString normalized = normalizedPathFor(filePath);
+    if (normalized.isEmpty() || trackExists(normalized)) {
+        spdlog::info("Skipping track '{}' (normalized='{}') - already in playlist", filePath, normalized);
+        return;
+    }
+
+    TrackEntry entry{displayNameForFile(filePath), filePath, normalized};
     m_tracks.append(entry);
     auto *item = new QListWidgetItem(entry.title);
     item->setData(Qt::UserRole, entry.filePath);
     item->setToolTip(entry.title);
     item->setSizeHint(QSize(0, 42));
     m_playlist->addItem(item);
+    m_knownPaths.insert(normalized);
+    spdlog::info("Track registered title='{}' normalized='{}'", entry.title, normalized);
     updateTransportAvailability();
+}
+
+void MainWindow::processSelectedFiles(const QStringList &files)
+{
+    QVector<QString> newTracks;
+    newTracks.reserve(files.size());
+    for (const QString &file : files) {
+        const QString normalized = normalizedPathFor(file);
+        if (normalized.isEmpty() || m_knownPaths.contains(normalized)) {
+            spdlog::info("Skipping duplicate {} (normalized={})", file, normalized);
+            continue;
+        }
+        spdlog::debug("Candidate track '{}' normalized '{}'", file, normalized);
+        newTracks.append(file);
+    }
+
+    if (newTracks.isEmpty()) {
+        spdlog::info("No new tracks to add");
+        return;
+    }
+
+    spdlog::info("Adding {} tracks", newTracks.size());
+    QElapsedTimer timer;
+    for (const QString &file : newTracks) {
+        timer.start();
+        addTrack(file);
+        spdlog::info("Queued '{}' in {} ms", file, timer.elapsed());
+    }
+
+    if (m_currentIndex == -1 && !m_tracks.isEmpty()) {
+        playTrack(0);
+    }
 }
 
 void MainWindow::playTrack(int index)
 {
     if (index < 0 || index >= m_tracks.size()) {
+        spdlog::warn("playTrack out of bounds index={}", index);
         return;
     }
 
     const TrackEntry &entry = m_tracks.at(index);
     if (!m_videoWidget->loadFile(entry.filePath)) {
+        spdlog::error("Failed to load track '{}'", entry.filePath);
         return;
     }
 
@@ -804,6 +920,11 @@ int MainWindow::resolvePreviousIndex() const
         }
     }
     return prev;
+}
+
+bool MainWindow::trackExists(const QString &filePath) const
+{
+    return m_knownPaths.contains(filePath);
 }
 
 void MainWindow::updatePlayPauseButton(bool playing)
@@ -975,3 +1096,11 @@ bool MainWindow::isCursorInside(QWidget *widget) const
     const QPoint localPos = widget->mapFromGlobal(QCursor::pos());
     return widget->rect().contains(localPos);
 }
+
+QString MainWindow::normalizedPathFor(const QString &filePath) const
+{
+    QFileInfo info(filePath);
+    const QString absolute = info.absoluteFilePath();
+    return QDir::cleanPath(absolute);
+}
+    QElapsedTimer timer;

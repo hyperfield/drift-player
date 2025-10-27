@@ -117,30 +117,30 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named bvplayer
+# Target rules for targets named drift_player
 
 # Build rule for target.
-bvplayer: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 bvplayer
-.PHONY : bvplayer
+drift_player: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 drift_player
+.PHONY : drift_player
 
 # fast build rule for target.
-bvplayer/fast:
-	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer.dir/build.make src/CMakeFiles/bvplayer.dir/build
-.PHONY : bvplayer/fast
+drift_player/fast:
+	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player.dir/build.make src/CMakeFiles/drift_player.dir/build
+.PHONY : drift_player/fast
 
 #=============================================================================
-# Target rules for targets named bvplayer_autogen
+# Target rules for targets named drift_player_autogen
 
 # Build rule for target.
-bvplayer_autogen: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 bvplayer_autogen
-.PHONY : bvplayer_autogen
+drift_player_autogen: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 drift_player_autogen
+.PHONY : drift_player_autogen
 
 # fast build rule for target.
-bvplayer_autogen/fast:
-	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/bvplayer_autogen.dir/build.make src/CMakeFiles/bvplayer_autogen.dir/build
-.PHONY : bvplayer_autogen/fast
+drift_player_autogen/fast:
+	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/drift_player_autogen.dir/build.make src/CMakeFiles/drift_player_autogen.dir/build
+.PHONY : drift_player_autogen/fast
 
 # Help Target
 help:
@@ -150,8 +150,8 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... bvplayer_autogen"
-	@echo "... bvplayer"
+	@echo "... drift_player_autogen"
+	@echo "... drift_player"
 .PHONY : help
 
 

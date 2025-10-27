@@ -128,7 +128,7 @@ CMAKE_PROJECT_DESCRIPTION:STATIC=
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=BVPlayer
+CMAKE_PROJECT_NAME:STATIC=DriftPlayer
 
 //Path to a program.
 CMAKE_RANLIB:FILEPATH=/usr/bin/ranlib
@@ -191,6 +191,15 @@ CMAKE_STRIP:FILEPATH=/usr/bin/strip
 // during the make.  This is useful for debugging only. With Visual
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
+
+//Value Computed by CMake
+DriftPlayer_BINARY_DIR:STATIC=/home/evoid/projects/bvplayer/build
+
+//Value Computed by CMake
+DriftPlayer_IS_TOP_LEVEL:STATIC=ON
+
+//Value Computed by CMake
+DriftPlayer_SOURCE_DIR:STATIC=/home/evoid/projects/bvplayer
 
 //Path to a file.
 OPENGL_EGL_INCLUDE_DIR:PATH=/usr/include
