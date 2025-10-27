@@ -1,6 +1,0 @@
-/home/evoid/projects/bvplayer/build/CMakeFiles/edit_cache.dir
-/home/evoid/projects/bvplayer/build/CMakeFiles/rebuild_cache.dir
-/home/evoid/projects/bvplayer/build/src/CMakeFiles/drift_player.dir
-/home/evoid/projects/bvplayer/build/src/CMakeFiles/edit_cache.dir
-/home/evoid/projects/bvplayer/build/src/CMakeFiles/rebuild_cache.dir
-/home/evoid/projects/bvplayer/build/src/CMakeFiles/drift_player_autogen.dir
