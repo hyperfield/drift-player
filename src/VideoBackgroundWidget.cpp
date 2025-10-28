@@ -15,6 +15,8 @@
 #include <QSurfaceFormat>
 #include <QSizePolicy>
 #include <QSize>
+#include <QThread>
+#include <QMetaType>
 #include <QtDebug>
 
 #include <spdlog/spdlog.h>
@@ -22,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <atomic>
 
 namespace
 {
@@ -32,8 +35,6 @@ constexpr float kQuadVertices[] = {
     -1.0f,  1.0f, 0.0f, 1.0f,
      1.0f,  1.0f, 1.0f, 1.0f
 };
-
-constexpr int kMaxMpvEventsPerTick = 32;
 
 const char *kBlurVertexShader = R"(#version 120
 attribute vec2 aPosition;
@@ -101,6 +102,66 @@ void main() {
 
 } // namespace
 
+Q_DECLARE_METATYPE(MpvEventPayload);
+
+class MpvEventWorker : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit MpvEventWorker(mpv_handle *handle, QObject *parent = nullptr)
+        : QObject(parent)
+        , m_handle(handle)
+    {
+    }
+
+public slots:
+    void process();
+    void stop();
+
+signals:
+    void eventReady(const MpvEventPayload &payload);
+
+private:
+    mpv_handle *m_handle = nullptr;
+    std::atomic_bool m_running{true};
+};
+
+void MpvEventWorker::process()
+{
+    while (m_running.load(std::memory_order_acquire)) {
+        mpv_event *event = mpv_wait_event(m_handle, -1);
+        if (!event) {
+            continue;
+        }
+
+        MpvEventPayload payload;
+        payload.id = event->event_id;
+
+        if (event->event_id == MPV_EVENT_PROPERTY_CHANGE) {
+            auto *prop = static_cast<mpv_event_property *>(event->data);
+            if (prop && prop->name) {
+                payload.propertyName = QByteArray(prop->name);
+                payload.format = prop->format;
+            }
+        }
+
+        emit eventReady(payload);
+
+        if (!m_running.load(std::memory_order_acquire) || event->event_id == MPV_EVENT_SHUTDOWN) {
+            break;
+        }
+    }
+}
+
+void MpvEventWorker::stop()
+{
+    m_running.store(false, std::memory_order_release);
+    if (m_handle) {
+        mpv_wakeup(m_handle);
+    }
+}
+
 VideoBackgroundWidget::VideoBackgroundWidget(QWidget *parent)
     : QOpenGLWidget(parent)
 {
@@ -109,11 +170,18 @@ VideoBackgroundWidget::VideoBackgroundWidget(QWidget *parent)
     setMinimumSize(0, 0);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
+    qRegisterMetaType<MpvEventPayload>("MpvEventPayload");
+
+    m_positionTimer.setInterval(80);
+    m_positionTimer.setSingleShot(false);
+    connect(&m_positionTimer, &QTimer::timeout, this, &VideoBackgroundWidget::pollPlaybackPosition);
+
     initializeMpv();
 }
 
 VideoBackgroundWidget::~VideoBackgroundWidget()
 {
+    m_positionTimer.stop();
     makeCurrent();
     releaseBlurResources();
     removeMpvShader();
@@ -338,29 +406,6 @@ void VideoBackgroundWidget::resizeGL(int w, int h)
     scheduleUpdate();
 }
 
-void VideoBackgroundWidget::processMpvEvents()
-{
-    if (!m_mpv) {
-        return;
-    }
-
-    int processed = 0;
-
-    while (processed < kMaxMpvEventsPerTick) {
-        mpv_event *event = mpv_wait_event(m_mpv, 0);
-        if (!event || event->event_id == MPV_EVENT_NONE) {
-            break;
-        }
-
-        handleMpvEvent(event);
-        ++processed;
-    }
-
-    if (processed == kMaxMpvEventsPerTick) {
-        QMetaObject::invokeMethod(this, &VideoBackgroundWidget::processMpvEvents, Qt::QueuedConnection);
-    }
-}
-
 void VideoBackgroundWidget::handleUpdate()
 {
     update();
@@ -415,16 +460,28 @@ void VideoBackgroundWidget::initializeMpv()
         return;
     }
 
-    mpv_set_wakeup_callback(m_mpv, &VideoBackgroundWidget::onMpvWakeup, this);
+    stopMpvEventThread();
+
+    m_mpvEventThread = new QThread;
+    m_mpvEventThread->setObjectName(QStringLiteral("MpvEventThread"));
+    m_mpvEventWorker = new MpvEventWorker(m_mpv);
+    m_mpvEventWorker->moveToThread(m_mpvEventThread);
+
+    connect(m_mpvEventThread, &QThread::started, m_mpvEventWorker, &MpvEventWorker::process);
+    connect(m_mpvEventWorker, &MpvEventWorker::eventReady, this, &VideoBackgroundWidget::handleMpvEventPayload, Qt::QueuedConnection);
+
+    m_mpvEventThread->start();
+
     mpv_observe_property(m_mpv, 0, "pause", MPV_FORMAT_FLAG);
     mpv_observe_property(m_mpv, 0, "duration", MPV_FORMAT_DOUBLE);
-    mpv_observe_property(m_mpv, 0, "time-pos", MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_mpv, 0, "hwdec-current", MPV_FORMAT_STRING);
     updateHardwareLogging();
 }
 
 void VideoBackgroundWidget::releaseMpv()
 {
+    stopMpvEventThread();
+
     if (m_mpvRender) {
         makeCurrent();
         mpv_render_context_set_update_callback(m_mpvRender, nullptr, nullptr);
@@ -434,41 +491,68 @@ void VideoBackgroundWidget::releaseMpv()
     }
 
     if (m_mpv) {
-        mpv_set_wakeup_callback(m_mpv, nullptr, nullptr);
         mpv_terminate_destroy(m_mpv);
         m_mpv = nullptr;
     }
 }
 
-void VideoBackgroundWidget::handleMpvEvent(mpv_event *event)
+void VideoBackgroundWidget::stopMpvEventThread()
 {
-    switch (event->event_id) {
-    case MPV_EVENT_FILE_LOADED:
-        if (m_mpv) {
-            double duration = 0.0;
-            if (mpv_get_property(m_mpv, "duration", MPV_FORMAT_DOUBLE, &duration) >= 0 && std::isfinite(duration)) {
-                if (duration < 0.0) {
-                    duration = 0.0;
-                }
-                m_duration = duration;
-            } else {
-                m_duration = 0.0;
-            }
+    if (!m_mpvEventThread) {
+        return;
+    }
 
-            double position = 0.0;
-            if (mpv_get_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &position) >= 0 && std::isfinite(position)) {
-                if (position < 0.0) {
-                    position = 0.0;
-                }
-                m_position = position;
-            } else {
-                m_position = 0.0;
-            }
+    if (m_mpvEventWorker) {
+        m_mpvEventWorker->stop();
+    }
 
-            emit positionChanged(m_position, m_duration);
+    m_mpvEventThread->quit();
+    m_mpvEventThread->wait();
+
+    m_mpvEventThread->deleteLater();
+    m_mpvEventThread = nullptr;
+}
+
+void VideoBackgroundWidget::handleMpvEventPayload(const MpvEventPayload &payload)
+{
+    if (!m_mpv) {
+        return;
+    }
+
+    handleMpvEvent(payload);
+}
+
+void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
+{
+    switch (payload.id) {
+    case MPV_EVENT_FILE_LOADED: {
+        double duration = 0.0;
+        if (mpv_get_property(m_mpv, "duration", MPV_FORMAT_DOUBLE, &duration) >= 0 && std::isfinite(duration)) {
+            if (duration < 0.0) {
+                duration = 0.0;
+            }
+            m_duration = duration;
+        } else {
+            m_duration = 0.0;
         }
+
+        double position = 0.0;
+        if (mpv_get_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &position) >= 0 && std::isfinite(position)) {
+            if (position < 0.0) {
+                position = 0.0;
+            }
+            m_position = position;
+        } else {
+            m_position = 0.0;
+        }
+
+        emit positionChanged(m_position, m_duration);
         updateHardwareLogging();
+        if (!m_isPaused) {
+            m_positionTimer.start();
+        }
         break;
+    }
     case MPV_EVENT_END_FILE:
         m_hasMedia = false;
         m_isPaused = true;
@@ -476,39 +560,61 @@ void VideoBackgroundWidget::handleMpvEvent(mpv_event *event)
         emit playbackFinished();
         emit playbackStateChanged(false);
         emit positionChanged(m_position, m_duration);
+        m_positionTimer.stop();
         break;
     case MPV_EVENT_PROPERTY_CHANGE: {
-        auto *prop = static_cast<mpv_event_property *>(event->data);
-        if (!prop || !prop->name) {
+        if (payload.propertyName.isEmpty()) {
             break;
         }
 
-        if (strcmp(prop->name, "pause") == 0 && prop->format == MPV_FORMAT_FLAG) {
-            bool paused = prop->data && (*static_cast<int *>(prop->data) != 0);
-            if (paused != m_isPaused) {
-                m_isPaused = paused;
-                emit playbackStateChanged(!m_isPaused);
+        const QByteArray &name = payload.propertyName;
+        if (name == "pause" && payload.format == MPV_FORMAT_FLAG) {
+            int pausedFlag = 0;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_FLAG, &pausedFlag) >= 0) {
+                bool paused = pausedFlag != 0;
+                if (paused != m_isPaused) {
+                    m_isPaused = paused;
+                    emit playbackStateChanged(!m_isPaused);
+                    if (m_isPaused) {
+                        m_positionTimer.stop();
+                    } else {
+                        m_positionTimer.start();
+                    }
+                }
             }
-        } else if (strcmp(prop->name, "duration") == 0 && prop->format == MPV_FORMAT_DOUBLE) {
-            double duration = prop->data ? *static_cast<double *>(prop->data) : 0.0;
-            if (!std::isfinite(duration) || duration < 0.0) {
+        } else if (name == "duration" && payload.format == MPV_FORMAT_DOUBLE) {
+            double duration = 0.0;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_DOUBLE, &duration) >= 0 && std::isfinite(duration)) {
+                if (duration < 0.0) {
+                    duration = 0.0;
+                }
+            } else {
                 duration = 0.0;
             }
+
             if (std::fabs(m_duration - duration) > 0.01) {
                 m_duration = duration;
                 emit positionChanged(m_position, m_duration);
             }
-        } else if (strcmp(prop->name, "time-pos") == 0 && prop->format == MPV_FORMAT_DOUBLE) {
-            double position = prop->data ? *static_cast<double *>(prop->data) : 0.0;
-            if (!std::isfinite(position) || position < 0.0) {
+        } else if (name == "time-pos" && payload.format == MPV_FORMAT_DOUBLE) {
+            double position = 0.0;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_DOUBLE, &position) >= 0 && std::isfinite(position)) {
+                if (position < 0.0) {
+                    position = 0.0;
+                }
+            } else {
                 position = 0.0;
             }
+
             m_position = position;
             emit positionChanged(m_position, m_duration);
-        } else if (strcmp(prop->name, "hwdec-current") == 0 && prop->format == MPV_FORMAT_STRING) {
-            const char *value = static_cast<const char *>(prop->data);
-            spdlog::info("mpv hwdec-current property changed to '{}'", value ? value : "");
-            updateHardwareLogging();
+        } else if (name == "hwdec-current" && payload.format == MPV_FORMAT_STRING) {
+            char *value = nullptr;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_STRING, &value) >= 0) {
+                spdlog::info("mpv hwdec-current property changed to '{}'", value ? value : "");
+                mpv_free(value);
+                updateHardwareLogging();
+            }
         }
         break;
     }
@@ -517,19 +623,36 @@ void VideoBackgroundWidget::handleMpvEvent(mpv_event *event)
     }
 }
 
-void VideoBackgroundWidget::scheduleUpdate()
+void VideoBackgroundWidget::pollPlaybackPosition()
 {
-    QMetaObject::invokeMethod(this, &VideoBackgroundWidget::handleUpdate, Qt::QueuedConnection);
-}
-
-void VideoBackgroundWidget::onMpvWakeup(void *ctx)
-{
-    auto *self = static_cast<VideoBackgroundWidget *>(ctx);
-    if (!self) {
+    if (!m_mpv || !m_hasMedia) {
         return;
     }
 
-    QMetaObject::invokeMethod(self, &VideoBackgroundWidget::processMpvEvents, Qt::QueuedConnection);
+    double duration = m_duration;
+    double position = m_position;
+
+    if (mpv_get_property(m_mpv, "duration", MPV_FORMAT_DOUBLE, &duration) < 0 || !std::isfinite(duration) || duration < 0.0) {
+        duration = 0.0;
+    }
+
+    if (mpv_get_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &position) < 0 || !std::isfinite(position) || position < 0.0) {
+        position = 0.0;
+    }
+
+    bool durationChanged = std::fabs(m_duration - duration) > 0.01;
+    bool positionDelta = std::fabs(m_position - position) > 0.005;
+
+    if (durationChanged || positionDelta) {
+        m_duration = duration;
+        m_position = position;
+        emit positionChanged(m_position, m_duration);
+    }
+}
+
+void VideoBackgroundWidget::scheduleUpdate()
+{
+    QMetaObject::invokeMethod(this, &VideoBackgroundWidget::handleUpdate, Qt::QueuedConnection);
 }
 
 void VideoBackgroundWidget::initializeBlurResources()
@@ -843,3 +966,5 @@ void VideoBackgroundWidget::selectBlurStrategy()
         applyMpvShader();
     }
 }
+
+#include "VideoBackgroundWidget.moc"

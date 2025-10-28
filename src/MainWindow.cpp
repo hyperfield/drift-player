@@ -4,33 +4,39 @@
 
 #include <QAbstractItemView>
 #include <QCloseEvent>
-#include <QDir>
-#include <QFileDialog>
-#include <QFileInfo>
+#include <QCoreApplication>
 #include <QCursor>
+#include <QDateTime>
+#include <QDialog>
+#include <QDir>
+#include <QEasingCurve>
+#include <QElapsedTimer>
 #include <QEvent>
+#include <QFile>
+#include <QFileInfo>
 #include <QFont>
-#include <QHBoxLayout>
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPainter>
+#include <QProcess>
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QRandomGenerator>
-#include <QEasingCurve>
-#include <QElapsedTimer>
-#include <QSlider>
+#include <QSignalBlocker>
 #include <QSize>
 #include <QSizePolicy>
+#include <QSlider>
 #include <QStackedLayout>
+#include <QStandardPaths>
 #include <QStyle>
+#include <QTextStream>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
-#include <QTimer>
-#include <QSignalBlocker>
 #include <QWidget>
 #include <cmath>
 #include <algorithm>
@@ -93,6 +99,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    cleanupAddDialogProcess();
     saveSettings();
 }
 
@@ -104,27 +111,111 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::handleAddMedia()
 {
-    const bool wasPlaying = m_videoWidget && m_videoWidget->hasMedia() && !m_videoWidget->isPaused();
-    if (wasPlaying) {
-        spdlog::info("Pausing playback for Add Media dialog");
-        m_videoWidget->pause();
+    if (m_addDialogOpen || m_addDialogProcess) {
+        spdlog::info("Add Media dialog already active; ignoring duplicate request");
+        return;
     }
 
-    const QString filter = tr("Media files (*.mp4 *.mkv *.mov *.mp3 *.flac *.wav);;All files (*.*)");
-    spdlog::info("Opening modal Add Media dialog");
-    const QStringList files = QFileDialog::getOpenFileNames(this, tr("Add Media"), QString(), filter);
-
-    if (wasPlaying) {
-        spdlog::info("Resuming playback after Add Media dialog");
-        m_videoWidget->play();
+    const QString helperPath = resolveDialogHelperPath();
+    if (helperPath.isEmpty()) {
+        spdlog::error("Add Media helper executable not found");
+        return;
     }
+
+    const QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (tempDir.isEmpty()) {
+        spdlog::error("Unable to determine writable temporary directory");
+        return;
+    }
+
+    QDir dir(tempDir);
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        spdlog::error("Unable to create temporary directory {}", tempDir.toStdString());
+        return;
+    }
+
+    m_addDialogTempFile = dir.filePath(QStringLiteral("drift_player_add_%1.txt")
+                                           .arg(QDateTime::currentMSecsSinceEpoch()));
+    QFile::remove(m_addDialogTempFile);
+
+    auto *process = new QProcess(this);
+    connect(process, &QProcess::finished, this, &MainWindow::handleAddDialogHelperFinished);
+    connect(process, &QProcess::errorOccurred, this, &MainWindow::handleAddDialogHelperError);
+
+    QStringList arguments;
+    arguments << m_addDialogTempFile;
+
+    process->setProgram(helperPath);
+    process->setArguments(arguments);
+
+    spdlog::info("Launching Add Media helper {} -> {}", helperPath.toStdString(), m_addDialogTempFile.toStdString());
+    m_addDialogOpen = true;
+    m_addDialogProcess = process;
+    m_addDialogProcess->start();
+}
+
+void MainWindow::handleAddDialogFiles(const QStringList &files)
+{
+    spdlog::info("Add Media selection received: {} entries", files.size());
+    processSelectedFiles(files);
+}
+
+void MainWindow::handleAddDialogClosed(int result)
+{
+    spdlog::info("Add Media dialog closed result={}", result);
+    m_addDialogOpen = false;
+}
+
+void MainWindow::handleAddDialogHelperFinished(int exitCode, QProcess::ExitStatus status)
+{
+    Q_UNUSED(status);
+
+    if (!m_addDialogProcess || sender() != m_addDialogProcess) {
+        return;
+    }
+
+    const QString tempPath = m_addDialogTempFile;
+    QStringList files;
+
+    if (!tempPath.isEmpty()) {
+        QFile file(tempPath);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            while (!stream.atEnd()) {
+                const QString line = stream.readLine().trimmed();
+                if (!line.isEmpty()) {
+                    files.append(line);
+                }
+            }
+        } else {
+            spdlog::warn("Add Media helper unable to open output file '{}'", tempPath.toStdString());
+        }
+    }
+
+    if (!tempPath.isEmpty()) {
+        QFile::remove(tempPath);
+    }
+    m_addDialogTempFile.clear();
 
     if (!files.isEmpty()) {
-        spdlog::info("Add Media selection received: {} entries", files.size());
-        processSelectedFiles(files);
+        handleAddDialogFiles(files);
+        handleAddDialogClosed(QDialog::Accepted);
     } else {
-        spdlog::info("Add Media dialog dismissed without selection");
+        handleAddDialogClosed((exitCode == 0) ? QDialog::Rejected : QDialog::Rejected);
     }
+
+    cleanupAddDialogProcess();
+}
+
+void MainWindow::handleAddDialogHelperError(QProcess::ProcessError error)
+{
+    if (!m_addDialogProcess || sender() != m_addDialogProcess) {
+        return;
+    }
+
+    spdlog::error("Add Media helper process error {}", static_cast<int>(error));
+    handleAddDialogClosed(QDialog::Rejected);
+    cleanupAddDialogProcess();
 }
 
 void MainWindow::handlePlayPause()
@@ -1102,5 +1193,45 @@ QString MainWindow::normalizedPathFor(const QString &filePath) const
     QFileInfo info(filePath);
     const QString absolute = info.absoluteFilePath();
     return QDir::cleanPath(absolute);
+}
+
+QString MainWindow::resolveDialogHelperPath() const
+{
+    QString helper = QCoreApplication::applicationDirPath();
+    if (helper.isEmpty()) {
+        return QString();
+    }
+
+    helper += QStringLiteral("/drift_dialog_helper");
+#ifdef Q_OS_WIN
+    helper += QStringLiteral(".exe");
+#endif
+
+    QFileInfo info(helper);
+    if (!info.exists() || !info.isExecutable()) {
+        spdlog::error("Add Media helper not executable at '{}'", helper.toStdString());
+        return QString();
+    }
+
+    return helper;
+}
+
+void MainWindow::cleanupAddDialogProcess()
+{
+    if (m_addDialogProcess) {
+        if (m_addDialogProcess->state() != QProcess::NotRunning) {
+            m_addDialogProcess->kill();
+            m_addDialogProcess->waitForFinished(2000);
+        }
+        m_addDialogProcess->deleteLater();
+        m_addDialogProcess = nullptr;
+    }
+
+    if (!m_addDialogTempFile.isEmpty()) {
+        QFile::remove(m_addDialogTempFile);
+        m_addDialogTempFile.clear();
+    }
+
+    m_addDialogOpen = false;
 }
     QElapsedTimer timer;

@@ -3,6 +3,8 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
 #include <QScopedPointer>
+#include <QByteArray>
+#include <QTimer>
 #include <memory>
 
 extern "C" {
@@ -10,10 +12,19 @@ extern "C" {
 #include <mpv/render_gl.h>
 }
 
+class QThread;
 class QOpenGLBuffer;
 class QOpenGLFramebufferObject;
 class QOpenGLShaderProgram;
 class QOpenGLVertexArrayObject;
+class MpvEventWorker;
+
+struct MpvEventPayload
+{
+    mpv_event_id id = MPV_EVENT_NONE;
+    QByteArray propertyName;
+    mpv_format format = MPV_FORMAT_NONE;
+};
 
 class VideoBackgroundWidget : public QOpenGLWidget, protected QOpenGLFunctions
 {
@@ -50,17 +61,17 @@ protected:
     void resizeGL(int w, int h) override;
 
 private slots:
-    void processMpvEvents();
     void handleUpdate();
+    void handleMpvEventPayload(const MpvEventPayload &payload);
 
 private:
     static void onMpvUpdate(void *ctx);
-    static void onMpvWakeup(void *ctx);
     static void *getMpvProcAddress(void *ctx, const char *name);
 
     void initializeMpv();
     void releaseMpv();
-    void handleMpvEvent(mpv_event *event);
+    void stopMpvEventThread();
+    void handleMpvEvent(const MpvEventPayload &payload);
     void scheduleUpdate();
     void initializeBlurResources();
     void releaseBlurResources();
@@ -73,9 +84,12 @@ private:
     bool ensureMpvShaderFile(float radius);
     void applyMpvShader();
     void removeMpvShader();
+    void pollPlaybackPosition();
 
     mpv_handle *m_mpv = nullptr;
     mpv_render_context *m_mpvRender = nullptr;
+    QThread *m_mpvEventThread = nullptr;
+    class MpvEventWorker *m_mpvEventWorker = nullptr;
     QString m_currentPath;
     bool m_hasMedia = false;
     bool m_isPaused = true;
@@ -95,4 +109,5 @@ private:
     bool m_lastHwdecState = false;
     QString m_mpvShaderPath;
     bool m_mpvShaderActive = false;
+    QTimer m_positionTimer;
 };

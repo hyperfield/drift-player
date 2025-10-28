@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QProcess>
 #include <QSet>
 #include <QSettings>
 #include <QTimer>
@@ -46,6 +47,10 @@ protected:
 
 private slots:
     void handleAddMedia();
+    void handleAddDialogFiles(const QStringList &files);
+    void handleAddDialogClosed(int result);
+    void handleAddDialogHelperFinished(int exitCode, QProcess::ExitStatus status);
+    void handleAddDialogHelperError(QProcess::ProcessError error);
     void handlePlayPause();
     void handlePlayNext();
     void handlePlayPrevious();
@@ -80,6 +85,8 @@ private:
                          QGraphicsOpacityEffect *effect, QPropertyAnimation *animation);
     [[nodiscard]] bool isCursorInside(QWidget *widget) const;
     [[nodiscard]] QString normalizedPathFor(const QString &filePath) const;
+    [[nodiscard]] QString resolveDialogHelperPath() const;
+    void cleanupAddDialogProcess();
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -116,4 +123,7 @@ private:
     bool m_progressSliderPressed = false;
     double m_lastDuration = 0.0;
     QSet<QString> m_knownPaths;
+    bool m_addDialogOpen = false;
+    QProcess *m_addDialogProcess = nullptr;
+    QString m_addDialogTempFile;
 };
