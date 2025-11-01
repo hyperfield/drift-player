@@ -15,6 +15,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFont>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
@@ -26,6 +27,7 @@
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QRandomGenerator>
+#include <QResizeEvent>
 #include <QSignalBlocker>
 #include <QSize>
 #include <QSizePolicy>
@@ -49,6 +51,7 @@ constexpr int kDefaultBlur = 70;
 constexpr qreal kInteractiveActiveOpacity = 1.0;
 constexpr qreal kInteractiveIdleOpacity = 0.55;
 constexpr int kInteractiveFadeDelayMs = 2000;
+constexpr int kCompactControlsThresholdPx = 960;
 
 QString displayNameForFile(const QString &filePath)
 {
@@ -91,7 +94,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_settings("evoid", "Drift Player")
 {
     resize(980, 640);
-    setMinimumSize(720, 460);
+    setMinimumSize(880, 480);
     setupUi();
     loadSettings();
     updatePlayPauseButton(false);
@@ -107,6 +110,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveSettings();
     event->accept();
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    updateControlsLayoutMode(event->size().width() < kCompactControlsThresholdPx);
 }
 
 void MainWindow::handleAddMedia()
@@ -586,8 +595,8 @@ void MainWindow::setupUi()
         "QToolButton {\n"
         "    background-color: rgba(255, 255, 255, 32);\n"
         "    border: none;\n"
-        "    border-radius: 20px;\n"
-        "    padding: 8px;\n"
+        "    border-radius: 999px;\n"
+        "    padding: 0;\n"
         "    color: rgba(255, 255, 255, 230);\n"
         "}\n"
         "QToolButton:hover {\n"
@@ -625,6 +634,9 @@ void MainWindow::setupUi()
 
     m_addButton = new QPushButton(tr("Add Media"), m_controlsContainer);
     m_addButton->setCursor(Qt::PointingHandCursor);
+    m_addButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    const int addButtonTextWidth = m_addButton->fontMetrics().horizontalAdvance(m_addButton->text());
+    m_addButton->setMinimumWidth(addButtonTextWidth + 36);
 
     m_playPauseButton = new QToolButton(m_controlsContainer);
     m_playPauseButton->setCheckable(false);
@@ -655,6 +667,9 @@ void MainWindow::setupUi()
     m_prevButton->setIconSize(iconButtonSize);
     m_nextButton->setIconSize(iconButtonSize);
     m_playPauseButton->setIconSize(QSize(32, 32));
+    m_prevButton->setFixedSize(44, 44);
+    m_nextButton->setFixedSize(44, 44);
+    m_playPauseButton->setFixedSize(52, 52);
 
     m_prevButton->setStyleSheet(iconButtonStyle);
     m_nextButton->setStyleSheet(iconButtonStyle);
@@ -663,13 +678,18 @@ void MainWindow::setupUi()
     m_addButton->setStyleSheet(textButtonStyle);
     m_shuffleButton->setStyleSheet(textButtonStyle);
     m_repeatButton->setStyleSheet(textButtonStyle);
+    m_shuffleButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    m_repeatButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    m_shuffleButton->setMinimumWidth(96);
+    m_repeatButton->setMinimumWidth(124);
 
     m_blurSlider = new QSlider(Qt::Horizontal, m_controlsContainer);
     m_blurSlider->setRange(0, 100);
     m_blurSlider->setValue(kDefaultBlur);
-    m_blurSlider->setFixedWidth(160);
     m_blurSlider->setCursor(Qt::PointingHandCursor);
     m_blurSlider->setToolTip(tr("Background blur"));
+    m_blurSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_blurSlider->setMinimumWidth(110);
     m_blurSlider->setStyleSheet(R"(
         QSlider {
             height: 18px;
@@ -701,9 +721,10 @@ void MainWindow::setupUi()
     m_volumeSlider = new QSlider(Qt::Horizontal, m_controlsContainer);
     m_volumeSlider->setRange(0, 100);
     m_volumeSlider->setValue(kDefaultVolume);
-    m_volumeSlider->setFixedWidth(180);
     m_volumeSlider->setToolTip(tr("Volume"));
     m_volumeSlider->setCursor(Qt::PointingHandCursor);
+    m_volumeSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_volumeSlider->setMinimumWidth(120);
     m_volumeSlider->setStyleSheet(R"(
         QSlider {
             height: 18px;
@@ -754,25 +775,45 @@ void MainWindow::setupUi()
 
     auto *buttonsLayout = new QHBoxLayout;
     buttonsLayout->setContentsMargins(0, 0, 0, 0);
-    buttonsLayout->setSpacing(14);
-    buttonsLayout->addWidget(m_addButton);
-    buttonsLayout->addSpacing(12);
-    buttonsLayout->addWidget(m_prevButton);
-    buttonsLayout->addWidget(m_playPauseButton);
-    buttonsLayout->addWidget(m_nextButton);
-    buttonsLayout->addWidget(m_shuffleButton);
-    buttonsLayout->addWidget(m_repeatButton);
-    buttonsLayout->addSpacing(20);
-    auto *blurLabel = new QLabel(tr("Blur"), m_controlsContainer);
-    blurLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
-    buttonsLayout->addWidget(blurLabel);
-    buttonsLayout->addWidget(m_blurSlider);
-    buttonsLayout->addSpacing(12);
-    auto *volumeLabel = new QLabel(tr("Volume"), m_controlsContainer);
-    volumeLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
-    buttonsLayout->addWidget(volumeLabel);
-    buttonsLayout->addWidget(m_volumeSlider);
+    buttonsLayout->setSpacing(16);
+
+    m_actionsLayout = new QHBoxLayout;
+    m_actionsLayout->setContentsMargins(0, 0, 0, 0);
+    m_actionsLayout->setSpacing(18);
+    m_actionsLayout->addWidget(m_addButton);
+    m_actionsLayout->addSpacing(12);
+    m_actionsLayout->addWidget(m_prevButton);
+    m_actionsLayout->addWidget(m_playPauseButton);
+    m_actionsLayout->addWidget(m_nextButton);
+    m_actionsLayout->addWidget(m_shuffleButton);
+    m_actionsLayout->addWidget(m_repeatButton);
+
+    m_blurLabel = new QLabel(tr("Blur"), m_controlsContainer);
+    m_blurLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
+
+    m_volumeLabel = new QLabel(tr("Volume"), m_controlsContainer);
+    m_volumeLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
+
+    m_slidersLayout = new QHBoxLayout;
+    m_slidersLayout->setContentsMargins(0, 0, 0, 0);
+    m_slidersLayout->setSpacing(12);
+    m_slidersLayout->addWidget(m_blurLabel);
+    m_slidersLayout->addWidget(m_blurSlider);
+    m_slidersLayout->addSpacing(8);
+    m_slidersLayout->addWidget(m_volumeLabel);
+    m_slidersLayout->addWidget(m_volumeSlider);
+    m_slidersLayout->setAlignment(m_blurLabel, Qt::AlignVCenter);
+    m_slidersLayout->setAlignment(m_volumeLabel, Qt::AlignVCenter);
+    m_slidersLayout->setStretch(1, 1);
+    m_slidersLayout->setStretch(3, 1);
+
+    buttonsLayout->addLayout(m_actionsLayout);
+    buttonsLayout->addSpacing(18);
+    buttonsLayout->addStretch(1);
+    buttonsLayout->addLayout(m_slidersLayout, 1);
     controlsLayout->addLayout(buttonsLayout);
+
+    updateControlsLayoutMode();
 
     m_controlsOpacity = new QGraphicsOpacityEffect(m_controlsContainer);
     m_controlsOpacity->setOpacity(kInteractiveIdleOpacity);
@@ -1025,17 +1066,30 @@ void MainWindow::updatePlayPauseButton(bool playing)
 
 void MainWindow::updateRepeatButton()
 {
+    if (!m_repeatButton) {
+        return;
+    }
+
+    QString buttonText;
+    QString tooltipText;
+
     switch (m_repeatMode) {
     case RepeatMode::None:
-        m_repeatButton->setText(tr("Repeat: Off"));
+        tooltipText = tr("Repeat: Off");
+        buttonText = m_compactControls ? tr("Rpt Off") : tooltipText;
         break;
     case RepeatMode::All:
-        m_repeatButton->setText(tr("Repeat: All"));
+        tooltipText = tr("Repeat: All");
+        buttonText = m_compactControls ? tr("Rpt All") : tooltipText;
         break;
     case RepeatMode::One:
-        m_repeatButton->setText(tr("Repeat: One"));
+        tooltipText = tr("Repeat: One");
+        buttonText = m_compactControls ? tr("Rpt One") : tooltipText;
         break;
     }
+
+    m_repeatButton->setText(buttonText);
+    m_repeatButton->setToolTip(tooltipText);
 }
 
 void MainWindow::updateTransportAvailability()
@@ -1063,6 +1117,53 @@ void MainWindow::updateTransportAvailability()
     if (!hasMedia) {
         updatePlayPauseButton(false);
     }
+}
+
+void MainWindow::updateControlsLayoutMode()
+{
+    updateControlsLayoutMode(width() < kCompactControlsThresholdPx);
+}
+
+void MainWindow::updateControlsLayoutMode(bool compact)
+{
+    m_compactControls = compact;
+
+    if (m_actionsLayout) {
+        m_actionsLayout->setSpacing(compact ? 10 : 18);
+    }
+
+    if (m_shuffleButton) {
+        m_shuffleButton->setText(compact ? tr("Shfl") : tr("Shuffle"));
+        m_shuffleButton->setMinimumWidth(compact ? 74 : 96);
+        m_shuffleButton->setToolTip(tr("Shuffle playback"));
+    }
+
+    if (m_repeatButton) {
+        m_repeatButton->setMinimumWidth(compact ? 108 : 124);
+    }
+
+    if (m_slidersLayout) {
+        m_slidersLayout->setSpacing(compact ? 8 : 12);
+        m_slidersLayout->setContentsMargins(compact ? 12 : 0, 0, 0, 0);
+    }
+
+    if (m_blurLabel) {
+        m_blurLabel->setVisible(!compact);
+    }
+
+    if (m_blurSlider) {
+        m_blurSlider->setMinimumWidth(compact ? 90 : 110);
+    }
+
+    if (m_volumeLabel) {
+        m_volumeLabel->setText(compact ? tr("Vol") : tr("Volume"));
+    }
+
+    if (m_volumeSlider) {
+        m_volumeSlider->setMinimumWidth(compact ? 110 : 120);
+    }
+
+    updateRepeatButton();
 }
 
 void MainWindow::setWidgetOpacity(QGraphicsOpacityEffect *effect, QPropertyAnimation *animation, qreal value, int durationMs)

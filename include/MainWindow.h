@@ -17,6 +17,8 @@ class QListWidgetItem;
 class QGraphicsOpacityEffect;
 class QPropertyAnimation;
 class QWidget;
+class QHBoxLayout;
+class QResizeEvent;
 
 struct TrackEntry
 {
@@ -44,6 +46,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
     void handleAddMedia();
@@ -80,6 +83,8 @@ private:
     void updateRepeatButton();
     void updateNowPlaying(const QString &filePath);
     void updateTransportAvailability();
+    void updateControlsLayoutMode(bool compact);
+    void updateControlsLayoutMode();
     void setWidgetOpacity(QGraphicsOpacityEffect *effect, QPropertyAnimation *animation, qreal value, int durationMs = 250);
     bool handleFadeEvent(QObject *watched, QEvent *event, QWidget *container, QTimer &timer,
                          QGraphicsOpacityEffect *effect, QPropertyAnimation *animation);
@@ -101,10 +106,14 @@ private:
     QSlider *m_volumeSlider = nullptr;
     QSlider *m_blurSlider = nullptr;
     QLabel *m_titleLabel = nullptr;
+    QLabel *m_blurLabel = nullptr;
+    QLabel *m_volumeLabel = nullptr;
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
     QWidget *m_controlsContainer = nullptr;
     QWidget *m_progressContainer = nullptr;
+    QHBoxLayout *m_actionsLayout = nullptr;
+    QHBoxLayout *m_slidersLayout = nullptr;
 
     QVector<TrackEntry> m_tracks;
     int m_currentIndex = -1;
@@ -126,4 +135,5 @@ private:
     bool m_addDialogOpen = false;
     QProcess *m_addDialogProcess = nullptr;
     QString m_addDialogTempFile;
+    bool m_compactControls = false;
 };
