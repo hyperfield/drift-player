@@ -18,7 +18,7 @@ target_link_libraries(drift_player
         Qt6::Gui
         Qt6::Widgets
         Qt6::OpenGLWidgets
-        PkgConfig::MPV
+        MPV::MPV
 )
 
 set_target_properties(drift_player PROPERTIES
