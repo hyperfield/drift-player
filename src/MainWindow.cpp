@@ -14,6 +14,7 @@
 #include <QEvent>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QFont>
 #include <QFontMetrics>
 #include <QFrame>
@@ -96,6 +97,10 @@ MainWindow::MainWindow(QWidget *parent)
     resize(980, 640);
     setMinimumSize(880, 480);
     setupUi();
+
+    m_playlistWatcher = new QFileSystemWatcher(this);
+    connect(m_playlistWatcher, &QFileSystemWatcher::fileChanged, this, &MainWindow::handleWatchedFileChanged);
+
     loadSettings();
     updatePlayPauseButton(false);
 }
@@ -417,6 +422,23 @@ void MainWindow::handlePositionChanged(double position, double duration)
                                  .arg(formatTime(position),
                                       formatTime(duration)));
     }
+}
+
+void MainWindow::handleWatchedFileChanged(const QString &path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QFileInfo info(path);
+    if (info.exists()) {
+        // ensure the watcher remains active after certain file operations
+        startWatchingTrack(path);
+        return;
+    }
+
+    spdlog::info("Detected missing media file '{}'; removing from playlist", path);
+    removeTrackByNormalizedPath(path);
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -906,6 +928,8 @@ void MainWindow::loadSettings()
     if (m_videoWidget) {
         m_videoWidget->setBlurAmount(static_cast<float>(blur) / 100.0f);
     }
+
+    restorePlaylistState();
     updateTransportAvailability();
 }
 
@@ -917,20 +941,27 @@ void MainWindow::saveSettings()
     if (m_blurSlider) {
         m_settings.setValue("visual/blur", m_blurSlider->value());
     }
+    savePlaylistState();
     m_settings.sync();
 }
 
-void MainWindow::addTrack(const QString &filePath)
+bool MainWindow::addTrack(const QString &filePath)
 {
     if (filePath.isEmpty()) {
         spdlog::warn("addTrack called with empty path");
-        return;
+        return false;
     }
 
     const QString normalized = normalizedPathFor(filePath);
     if (normalized.isEmpty() || trackExists(normalized)) {
         spdlog::info("Skipping track '{}' (normalized='{}') - already in playlist", filePath, normalized);
-        return;
+        return false;
+    }
+
+    QFileInfo info(normalized);
+    if (!info.exists()) {
+        spdlog::warn("Skipping '{}' because file is missing", normalized);
+        return false;
     }
 
     TrackEntry entry{displayNameForFile(filePath), filePath, normalized};
@@ -942,7 +973,15 @@ void MainWindow::addTrack(const QString &filePath)
     m_playlist->addItem(item);
     m_knownPaths.insert(normalized);
     spdlog::info("Track registered title='{}' normalized='{}'", entry.title, normalized);
+
+    startWatchingTrack(normalized);
+
+    if (!m_isRestoringPlaylist) {
+        savePlaylistState();
+    }
+
     updateTransportAvailability();
+    return true;
 }
 
 void MainWindow::processSelectedFiles(const QStringList &files)
@@ -968,8 +1007,9 @@ void MainWindow::processSelectedFiles(const QStringList &files)
     QElapsedTimer timer;
     for (const QString &file : newTracks) {
         timer.start();
-        addTrack(file);
-        spdlog::info("Queued '{}' in {} ms", file, timer.elapsed());
+        if (addTrack(file)) {
+            spdlog::info("Queued '{}' in {} ms", file, timer.elapsed());
+        }
     }
 
     if (m_currentIndex == -1 && !m_tracks.isEmpty()) {
@@ -1057,6 +1097,118 @@ int MainWindow::resolvePreviousIndex() const
 bool MainWindow::trackExists(const QString &filePath) const
 {
     return m_knownPaths.contains(filePath);
+}
+
+void MainWindow::startWatchingTrack(const QString &normalizedPath)
+{
+    if (!m_playlistWatcher || normalizedPath.isEmpty() || m_watchedPaths.contains(normalizedPath)) {
+        return;
+    }
+
+    if (!QFileInfo::exists(normalizedPath)) {
+        return;
+    }
+
+    if (m_playlistWatcher->addPath(normalizedPath)) {
+        m_watchedPaths.insert(normalizedPath);
+    }
+}
+
+void MainWindow::stopWatchingTrack(const QString &normalizedPath)
+{
+    if (!m_playlistWatcher || normalizedPath.isEmpty() || !m_watchedPaths.contains(normalizedPath)) {
+        return;
+    }
+
+    m_playlistWatcher->removePath(normalizedPath);
+    m_watchedPaths.remove(normalizedPath);
+}
+
+void MainWindow::removeTrackByNormalizedPath(const QString &normalizedPath)
+{
+    for (int i = 0; i < m_tracks.size(); ++i) {
+        if (m_tracks.at(i).normalizedPath == normalizedPath) {
+            removeTrackAt(i);
+            break;
+        }
+    }
+}
+
+void MainWindow::removeTrackAt(int index)
+{
+    if (index < 0 || index >= m_tracks.size()) {
+        return;
+    }
+
+    const TrackEntry entry = m_tracks.at(index);
+    spdlog::info("Removing track '{}' (normalized='{}')", entry.filePath, entry.normalizedPath);
+
+    stopWatchingTrack(entry.normalizedPath);
+    m_knownPaths.remove(entry.normalizedPath);
+    m_tracks.removeAt(index);
+
+    if (m_playlist) {
+        if (QListWidgetItem *item = m_playlist->takeItem(index)) {
+            delete item;
+        }
+    }
+
+    if (m_currentIndex == index) {
+        m_currentIndex = -1;
+        updateNowPlaying(QString());
+        if (m_videoWidget) {
+            m_videoWidget->pause();
+        }
+        updatePlayPauseButton(false);
+        if (m_playlist) {
+            m_playlist->setCurrentRow(-1);
+        }
+    } else if (m_currentIndex > index) {
+        --m_currentIndex;
+        if (m_playlist && m_currentIndex >= 0 && m_currentIndex < m_tracks.size()) {
+            m_playlist->setCurrentRow(m_currentIndex);
+        }
+    }
+
+    savePlaylistState();
+    updateTransportAvailability();
+}
+
+void MainWindow::restorePlaylistState()
+{
+    const QStringList stored = m_settings.value("playlist/paths").toStringList();
+    if (stored.isEmpty()) {
+        return;
+    }
+
+    m_isRestoringPlaylist = true;
+    for (const QString &path : stored) {
+        if (path.isEmpty()) {
+            continue;
+        }
+
+        if (!QFileInfo::exists(path)) {
+            spdlog::info("Skipping missing playlist entry '{}' during restore", path);
+            continue;
+        }
+
+        addTrack(path);
+    }
+    m_isRestoringPlaylist = false;
+
+    savePlaylistState();
+}
+
+void MainWindow::savePlaylistState()
+{
+    QStringList paths;
+    paths.reserve(m_tracks.size());
+    for (const TrackEntry &entry : m_tracks) {
+        paths.append(entry.normalizedPath);
+    }
+
+    m_settings.setValue("playlist/paths", paths);
+    m_settings.sync();
 }
 
 void MainWindow::updatePlayPauseButton(bool playing)

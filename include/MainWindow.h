@@ -19,6 +19,7 @@ class QPropertyAnimation;
 class QWidget;
 class QHBoxLayout;
 class QResizeEvent;
+class QFileSystemWatcher;
 
 struct TrackEntry
 {
@@ -68,12 +69,13 @@ private slots:
     void handleProgressSliderReleased();
     void handleProgressSliderMoved(int value);
     void handlePositionChanged(double position, double duration);
+    void handleWatchedFileChanged(const QString &path);
 
 private:
     void setupUi();
     void loadSettings();
     void saveSettings();
-    void addTrack(const QString &filePath);
+    bool addTrack(const QString &filePath);
     void processSelectedFiles(const QStringList &files);
     bool trackExists(const QString &filePath) const;
     void playTrack(int index);
@@ -92,6 +94,12 @@ private:
     [[nodiscard]] QString normalizedPathFor(const QString &filePath) const;
     [[nodiscard]] QString resolveDialogHelperPath() const;
     void cleanupAddDialogProcess();
+    void startWatchingTrack(const QString &normalizedPath);
+    void stopWatchingTrack(const QString &normalizedPath);
+    void removeTrackByNormalizedPath(const QString &normalizedPath);
+    void removeTrackAt(int index);
+    void restorePlaylistState();
+    void savePlaylistState();
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -114,6 +122,7 @@ private:
     QWidget *m_progressContainer = nullptr;
     QHBoxLayout *m_actionsLayout = nullptr;
     QHBoxLayout *m_slidersLayout = nullptr;
+    QFileSystemWatcher *m_playlistWatcher = nullptr;
 
     QVector<TrackEntry> m_tracks;
     int m_currentIndex = -1;
@@ -136,4 +145,6 @@ private:
     QProcess *m_addDialogProcess = nullptr;
     QString m_addDialogTempFile;
     bool m_compactControls = false;
+    bool m_isRestoringPlaylist = false;
+    QSet<QString> m_watchedPaths;
 };
