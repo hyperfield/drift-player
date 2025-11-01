@@ -24,6 +24,7 @@ struct MpvEventPayload
     mpv_event_id id = MPV_EVENT_NONE;
     QByteArray propertyName;
     mpv_format format = MPV_FORMAT_NONE;
+    int endFileReason = -1;
 };
 
 class VideoBackgroundWidget : public QOpenGLWidget, protected QOpenGLFunctions

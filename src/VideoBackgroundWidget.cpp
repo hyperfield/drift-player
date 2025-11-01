@@ -144,6 +144,11 @@ void MpvEventWorker::process()
                 payload.propertyName = QByteArray(prop->name);
                 payload.format = prop->format;
             }
+        } else if (event->event_id == MPV_EVENT_END_FILE) {
+            auto *end = static_cast<mpv_event_end_file *>(event->data);
+            if (end) {
+                payload.endFileReason = static_cast<int>(end->reason);
+            }
         }
 
         emit eventReady(payload);
@@ -553,7 +558,12 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
         }
         break;
     }
-    case MPV_EVENT_END_FILE:
+    case MPV_EVENT_END_FILE: {
+        const auto reason = static_cast<mpv_end_file_reason>(payload.endFileReason);
+        if (reason == MPV_END_FILE_REASON_STOP) {
+            break;
+        }
+
         m_hasMedia = false;
         m_isPaused = true;
         m_position = 0.0;
@@ -562,6 +572,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
         emit positionChanged(m_position, m_duration);
         m_positionTimer.stop();
         break;
+    }
     case MPV_EVENT_PROPERTY_CHANGE: {
         if (payload.propertyName.isEmpty()) {
             break;
