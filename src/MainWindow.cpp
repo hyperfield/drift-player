@@ -23,6 +23,8 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QItemSelectionModel>
+#include <QItemSelection>
 #include <QPainter>
 #include <QApplication>
 #include <QStyledItemDelegate>
@@ -831,6 +833,12 @@ void MainWindow::setupUi()
     m_playlist->setItemDelegate(new PlaylistItemDelegate(m_playlist));
     m_playlist->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_playlist, &QListWidget::customContextMenuRequested, this, &MainWindow::handlePlaylistContextMenu);
+    connect(m_playlist, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *, QListWidgetItem *) {
+        refreshPlaylistStyles();
+    });
+    connect(m_playlist->selectionModel(), &QItemSelectionModel::selectionChanged, this, [this](const QItemSelection &, const QItemSelection &) {
+        refreshPlaylistStyles();
+    });
     m_playlistOpacity = new QGraphicsOpacityEffect(m_playlist);
     m_playlistOpacity->setOpacity(kInteractiveIdleOpacity);
     m_playlist->setGraphicsEffect(m_playlistOpacity);
@@ -1563,6 +1571,7 @@ void MainWindow::savePlaylistState()
 
     m_settings.setValue("playlist/paths", paths);
     m_settings.setValue("playlist/durations", durations);
+    refreshPlaylistStyles();
 }
 
 void MainWindow::enqueueDurationProbe(const QString &normalizedPath)
@@ -1646,6 +1655,19 @@ void MainWindow::finalizeDurationFor(const QString &normalizedPath, double secon
     }
 }
 
+void MainWindow::refreshPlaylistStyles()
+{
+    if (!m_playlist) {
+        return;
+    }
+
+    for (int i = 0; i < m_playlist->count(); ++i) {
+        if (QListWidgetItem *item = m_playlist->item(i)) {
+            updatePlaylistRowState(i, item);
+        }
+    }
+}
+
 void MainWindow::requestRemoveTrack(int index)
 {
     if (index < 0 || index >= m_tracks.size()) {
@@ -1662,6 +1684,29 @@ void MainWindow::logTracks(const char *tag) const
         const auto &t = m_tracks.at(i);
         spdlog::debug("  [{}] title='{}' normalized='{}' duration={}", i, t.title, t.normalizedPath, t.durationSeconds);
     }
+}
+
+void MainWindow::updatePlaylistRowState(int index, QListWidgetItem *item)
+{
+    if (!item) {
+        return;
+    }
+
+    const bool isCurrent = (index == m_currentIndex && m_currentIndex != -1);
+    QFont font = item->font();
+    font.setBold(isCurrent);
+    item->setFont(font);
+
+    const QColor normalText(245, 245, 250, 220);
+    const QColor playingText(255, 255, 255, 255);
+    item->setForeground(isCurrent ? playingText : normalText);
+
+    if (!item->isSelected()) {
+        item->setBackground(isCurrent ? QColor(255, 255, 255, 40) : Qt::transparent);
+    }
+
+    spdlog::debug("Playlist row {} state updated: playing={} selected={}",
+                  index, isCurrent, item->isSelected());
 }
 
 void MainWindow::updatePlaylistItem(int index)
@@ -1685,6 +1730,8 @@ void MainWindow::updatePlaylistItem(int index)
         durationText = formatTime(entry.durationSeconds);
     }
     item->setData(Qt::UserRole + 1, durationText);
+
+    updatePlaylistRowState(index, item);
 }
 
 void MainWindow::updatePlayPauseButton(bool playing)

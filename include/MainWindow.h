@@ -91,6 +91,7 @@ private:
     void updatePlayPauseButton(bool playing);
     void updateRepeatButton();
     void updateNowPlaying(const QString &filePath);
+    void refreshPlaylistStyles();
     void updateTransportAvailability();
     void updateControlsLayoutMode(bool compact);
     void updateControlsLayoutMode();
@@ -113,6 +114,7 @@ private:
     void finalizeDurationFor(const QString &normalizedPath, double seconds);
     void logTracks(const char *tag) const;
     void requestRemoveTrack(int index);
+    void updatePlaylistRowState(int index, QListWidgetItem *item);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
