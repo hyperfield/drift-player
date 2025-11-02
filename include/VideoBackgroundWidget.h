@@ -111,4 +111,5 @@ private:
     QString m_mpvShaderPath;
     bool m_mpvShaderActive = false;
     QTimer m_positionTimer;
+    bool m_ignoreStopEndFile = false;
 };

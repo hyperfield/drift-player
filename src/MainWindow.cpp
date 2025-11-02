@@ -24,6 +24,8 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPainter>
+#include <QApplication>
+#include <QStyledItemDelegate>
 #include <QProcess>
 #include <QPropertyAnimation>
 #include <QPushButton>
@@ -36,11 +38,18 @@
 #include <QStackedLayout>
 #include <QStandardPaths>
 #include <QStyle>
+#include <QVariant>
 #include <QTextStream>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QtConcurrent/QtConcurrentRun>
+#include <memory>
+
+extern "C" {
+#include <mpv/client.h>
+}
 #include <cmath>
 #include <algorithm>
 #include <spdlog/spdlog.h>
@@ -88,6 +97,126 @@ QString formatTime(double seconds)
         .arg(minutes, 2, 10, QChar('0'))
         .arg(secs, 2, 10, QChar('0'));
 }
+
+double probeDurationWithMpv(const QString &path)
+{
+    if (path.isEmpty()) {
+        return -1.0;
+    }
+
+    QFileInfo info(path);
+    if (!info.exists()) {
+        return -1.0;
+    }
+
+    struct MpvHandleDeleter
+    {
+        void operator()(mpv_handle *handle) const
+        {
+            if (handle) {
+                mpv_terminate_destroy(handle);
+            }
+        }
+    };
+
+    std::unique_ptr<mpv_handle, MpvHandleDeleter> handle(mpv_create());
+    if (!handle) {
+        return -1.0;
+    }
+
+    mpv_set_option_string(handle.get(), "terminal", "no");
+    mpv_set_option_string(handle.get(), "msg-level", "all=no");
+    mpv_set_option_string(handle.get(), "vid", "no");
+    mpv_set_option_string(handle.get(), "audio", "no");
+    mpv_set_option_string(handle.get(), "vo", "null");
+    mpv_set_option_string(handle.get(), "ao", "null");
+    mpv_set_option_string(handle.get(), "cache", "no");
+    mpv_set_option_string(handle.get(), "keep-open", "no");
+    mpv_set_option_string(handle.get(), "pause", "yes");
+
+    if (mpv_initialize(handle.get()) < 0) {
+        return -1.0;
+    }
+
+    QByteArray encoded = QFile::encodeName(path);
+    const char *loadCmd[] = {"loadfile", encoded.constData(), nullptr};
+    if (mpv_command(handle.get(), loadCmd) < 0) {
+        return -1.0;
+    }
+
+    double duration = -1.0;
+
+    while (true) {
+        mpv_event *event = mpv_wait_event(handle.get(), 5.0);
+        if (!event) {
+            break;
+        }
+
+        if (event->event_id == MPV_EVENT_FILE_LOADED) {
+            double value = 0.0;
+            if (mpv_get_property(handle.get(), "duration", MPV_FORMAT_DOUBLE, &value) >= 0 && std::isfinite(value) && value > 0.0) {
+                duration = value;
+            }
+        }
+
+        if (event->event_id == MPV_EVENT_END_FILE || event->event_id == MPV_EVENT_FILE_LOADED || event->event_id == MPV_EVENT_SHUTDOWN) {
+            break;
+        }
+    }
+
+    return duration;
+}
+
+class PlaylistItemDelegate : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        if (!painter) {
+            return;
+        }
+
+        QStyleOptionViewItem opt(option);
+        initStyleOption(&opt, index);
+        QString durationText = index.data(Qt::UserRole + 1).toString();
+        const QWidget *widget = option.widget;
+        QStyle *style = widget ? widget->style() : QApplication::style();
+
+        opt.text.clear();
+        style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+
+        painter->save();
+        painter->setFont(opt.font);
+
+        QRect textRect = style->subElementRect(QStyle::SE_ItemViewItemText, &opt, widget);
+        const QPalette::ColorRole textRole = (opt.state & QStyle::State_Selected) ? QPalette::HighlightedText : QPalette::Text;
+        const QColor textColor = opt.palette.color(textRole);
+        painter->setPen(textColor);
+
+        QFontMetrics metrics(opt.font);
+        const int spacing = 14;
+
+        if (!durationText.isEmpty()) {
+            const int durationWidth = metrics.horizontalAdvance(durationText);
+            QRect durationRect = textRect;
+            durationRect.setLeft(durationRect.right() - durationWidth);
+            painter->drawText(durationRect, Qt::AlignRight | Qt::AlignVCenter, durationText);
+            textRect.setRight(durationRect.left() - spacing);
+        }
+
+        if (textRect.width() < 0) {
+            textRect.setWidth(0);
+        }
+
+        const QString title = index.data(Qt::DisplayRole).toString();
+        const QString elided = metrics.elidedText(title, Qt::ElideRight, textRect.width());
+        painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, elided);
+
+        painter->restore();
+    }
+};
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent)
@@ -100,6 +229,23 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_playlistWatcher = new QFileSystemWatcher(this);
     connect(m_playlistWatcher, &QFileSystemWatcher::fileChanged, this, &MainWindow::handleWatchedFileChanged);
+
+    m_durationFutureWatcher = new QFutureWatcher<double>(this);
+    connect(m_durationFutureWatcher, &QFutureWatcher<double>::finished, this, [this]() {
+        const QString path = m_durationProbeCurrent;
+        const double seconds = m_durationFutureWatcher->result();
+
+        if (!path.isEmpty()) {
+            if (seconds > 0.5) {
+                finalizeDurationFor(path, seconds);
+            } else {
+                spdlog::warn("Duration probe returned {} for '{}'", seconds, path.toStdString());
+            }
+        }
+
+        m_durationProbeCurrent.clear();
+        QMetaObject::invokeMethod(this, &MainWindow::processDurationQueue, Qt::QueuedConnection);
+    });
 
     loadSettings();
     updatePlayPauseButton(false);
@@ -304,8 +450,12 @@ void MainWindow::handlePlaybackStateChanged(bool playing)
 void MainWindow::handlePlaybackFinished()
 {
     const int nextIndex = resolveNextIndex();
+    spdlog::info("Playback finished. Current index={} next index={}", m_currentIndex, nextIndex);
     if (nextIndex != -1) {
-        playTrack(nextIndex);
+        QMetaObject::invokeMethod(this, [this, nextIndex]() {
+            spdlog::info("Advancing to next index {}", nextIndex);
+            playTrack(nextIndex);
+        }, Qt::QueuedConnection);
     } else {
         updatePlayPauseButton(false);
         updateNowPlaying(QString());
@@ -422,6 +572,17 @@ void MainWindow::handlePositionChanged(double position, double duration)
                                  .arg(formatTime(position),
                                       formatTime(duration)));
     }
+
+    if (m_currentIndex >= 0 && m_currentIndex < m_tracks.size() && duration > 0.0) {
+        TrackEntry &entry = m_tracks[m_currentIndex];
+        if (std::fabs(entry.durationSeconds - duration) > 0.5) {
+            entry.durationSeconds = duration;
+            updatePlaylistItem(m_currentIndex);
+            if (!m_isRestoringPlaylist) {
+                savePlaylistState();
+            }
+        }
+    }
 }
 
 void MainWindow::handleWatchedFileChanged(const QString &path)
@@ -509,6 +670,7 @@ void MainWindow::setupUi()
             background: none;
         }
     )");
+    m_playlist->setItemDelegate(new PlaylistItemDelegate(m_playlist));
     m_playlistOpacity = new QGraphicsOpacityEffect(m_playlist);
     m_playlistOpacity->setOpacity(kInteractiveIdleOpacity);
     m_playlist->setGraphicsEffect(m_playlistOpacity);
@@ -966,13 +1128,15 @@ bool MainWindow::addTrack(const QString &filePath)
 
     TrackEntry entry{displayNameForFile(filePath), filePath, normalized};
     m_tracks.append(entry);
+    const int index = m_tracks.size() - 1;
+
     auto *item = new QListWidgetItem(entry.title);
-    item->setData(Qt::UserRole, entry.filePath);
-    item->setToolTip(entry.title);
     item->setSizeHint(QSize(0, 42));
     m_playlist->addItem(item);
     m_knownPaths.insert(normalized);
     spdlog::info("Track registered title='{}' normalized='{}'", entry.title, normalized);
+
+    updatePlaylistItem(index);
 
     startWatchingTrack(normalized);
 
@@ -1009,6 +1173,8 @@ void MainWindow::processSelectedFiles(const QStringList &files)
         timer.start();
         if (addTrack(file)) {
             spdlog::info("Queued '{}' in {} ms", file, timer.elapsed());
+            const QString normalized = normalizedPathFor(file);
+            enqueueDurationProbe(normalized);
         }
     }
 
@@ -1147,6 +1313,13 @@ void MainWindow::removeTrackAt(int index)
     m_knownPaths.remove(entry.normalizedPath);
     m_tracks.removeAt(index);
 
+    m_durationProbeQueue.removeAll(entry.normalizedPath);
+    if (!m_durationProbeCurrent.isEmpty() && m_durationProbeCurrent == entry.normalizedPath) {
+        m_durationProbeCurrent.clear();
+    }
+
+    QMetaObject::invokeMethod(this, &MainWindow::processDurationQueue, Qt::QueuedConnection);
+
     if (m_playlist) {
         if (QListWidgetItem *item = m_playlist->takeItem(index)) {
             delete item;
@@ -1181,8 +1354,11 @@ void MainWindow::restorePlaylistState()
         return;
     }
 
+    const QVariantList storedDurations = m_settings.value("playlist/durations").toList();
+
     m_isRestoringPlaylist = true;
-    for (const QString &path : stored) {
+    for (int i = 0; i < stored.size(); ++i) {
+        const QString &path = stored.at(i);
         if (path.isEmpty()) {
             continue;
         }
@@ -1192,7 +1368,19 @@ void MainWindow::restorePlaylistState()
             continue;
         }
 
-        addTrack(path);
+        if (addTrack(path)) {
+            if (i < storedDurations.size()) {
+                double storedDuration = storedDurations.at(i).toDouble();
+                if (storedDuration > 0.5 && !m_tracks.isEmpty()) {
+                    m_tracks.last().durationSeconds = storedDuration;
+                    updatePlaylistItem(m_tracks.size() - 1);
+                } else {
+                    enqueueDurationProbe(path);
+                }
+            } else {
+                enqueueDurationProbe(path);
+            }
+        }
     }
     m_isRestoringPlaylist = false;
 
@@ -1208,7 +1396,117 @@ void MainWindow::savePlaylistState()
     }
 
     m_settings.setValue("playlist/paths", paths);
-    m_settings.sync();
+
+    QVariantList durations;
+    durations.reserve(m_tracks.size());
+    for (const TrackEntry &entry : m_tracks) {
+        durations.append(entry.durationSeconds);
+    }
+    m_settings.setValue("playlist/durations", durations);
+}
+
+void MainWindow::enqueueDurationProbe(const QString &normalizedPath)
+{
+    if (!m_durationFutureWatcher || normalizedPath.isEmpty()) {
+        return;
+    }
+
+    auto trackIt = std::find_if(m_tracks.cbegin(), m_tracks.cend(), [&normalizedPath](const TrackEntry &entry) {
+        return entry.normalizedPath == normalizedPath;
+    });
+
+    if (trackIt == m_tracks.cend()) {
+        return;
+    }
+
+    if (trackIt->durationSeconds > 0.5) {
+        return;
+    }
+
+    if (m_durationProbeCurrent == normalizedPath || m_durationProbeQueue.contains(normalizedPath)) {
+        return;
+    }
+
+    m_durationProbeQueue.enqueue(normalizedPath);
+    if (m_durationProbeCurrent.isEmpty()) {
+        QMetaObject::invokeMethod(this, &MainWindow::processDurationQueue, Qt::QueuedConnection);
+    }
+}
+
+void MainWindow::processDurationQueue()
+{
+    if (!m_durationFutureWatcher || m_durationFutureWatcher->isRunning() || !m_durationProbeCurrent.isEmpty()) {
+        return;
+    }
+
+    while (!m_durationProbeQueue.isEmpty()) {
+        const QString path = m_durationProbeQueue.dequeue();
+
+        auto trackIt = std::find_if(m_tracks.cbegin(), m_tracks.cend(), [&path](const TrackEntry &entry) {
+            return entry.normalizedPath == path;
+        });
+
+        if (trackIt == m_tracks.cend()) {
+            continue;
+        }
+
+        if (trackIt->durationSeconds > 0.5) {
+            continue;
+        }
+
+        if (!QFileInfo::exists(path)) {
+            continue;
+        }
+
+        m_durationProbeCurrent = path;
+        m_durationFutureWatcher->setFuture(QtConcurrent::run(&probeDurationWithMpv, path));
+        break;
+    }
+}
+
+void MainWindow::finalizeDurationFor(const QString &normalizedPath, double seconds)
+{
+    if (normalizedPath.isEmpty() || seconds <= 0.5) {
+        return;
+    }
+
+    bool updated = false;
+    for (int i = 0; i < m_tracks.size(); ++i) {
+        if (m_tracks.at(i).normalizedPath == normalizedPath) {
+            if (std::fabs(m_tracks[i].durationSeconds - seconds) > 0.5) {
+                m_tracks[i].durationSeconds = seconds;
+                updatePlaylistItem(i);
+                updated = true;
+            }
+        }
+    }
+
+    if (updated && !m_isRestoringPlaylist) {
+        savePlaylistState();
+    }
+}
+
+void MainWindow::updatePlaylistItem(int index)
+{
+    if (!m_playlist || index < 0 || index >= m_tracks.size()) {
+        return;
+    }
+
+    QListWidgetItem *item = m_playlist->item(index);
+    if (!item) {
+        return;
+    }
+
+    const TrackEntry &entry = m_tracks.at(index);
+    item->setText(entry.title);
+    item->setData(Qt::UserRole, entry.filePath);
+    item->setToolTip(QStringLiteral("%1\n%2").arg(entry.title, entry.filePath));
+
+    QString durationText;
+    if (entry.durationSeconds > 0.5) {
+        durationText = formatTime(entry.durationSeconds);
+    }
+    item->setData(Qt::UserRole + 1, durationText);
 }
 
 void MainWindow::updatePlayPauseButton(bool playing)

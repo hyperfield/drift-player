@@ -7,6 +7,8 @@
 #include <QTimer>
 #include <QString>
 #include <QVector>
+#include <QQueue>
+#include <QFutureWatcher>
 
 class QListWidget;
 class QPushButton;
@@ -26,6 +28,7 @@ struct TrackEntry
     QString title;
     QString filePath;
     QString normalizedPath;
+    double durationSeconds = -1.0;
 };
 
 enum class RepeatMode
@@ -100,6 +103,10 @@ private:
     void removeTrackAt(int index);
     void restorePlaylistState();
     void savePlaylistState();
+    void updatePlaylistItem(int index);
+    void enqueueDurationProbe(const QString &normalizedPath);
+    void processDurationQueue();
+    void finalizeDurationFor(const QString &normalizedPath, double seconds);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -123,6 +130,9 @@ private:
     QHBoxLayout *m_actionsLayout = nullptr;
     QHBoxLayout *m_slidersLayout = nullptr;
     QFileSystemWatcher *m_playlistWatcher = nullptr;
+    QFutureWatcher<double> *m_durationFutureWatcher = nullptr;
+    QQueue<QString> m_durationProbeQueue;
+    QString m_durationProbeCurrent;
 
     QVector<TrackEntry> m_tracks;
     int m_currentIndex = -1;

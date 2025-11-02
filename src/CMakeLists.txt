@@ -18,6 +18,7 @@ target_link_libraries(drift_player
         Qt6::Gui
         Qt6::Widgets
         Qt6::OpenGLWidgets
+        Qt6::Concurrent
         MPV::MPV
 )
 

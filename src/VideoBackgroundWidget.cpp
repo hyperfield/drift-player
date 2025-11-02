@@ -151,6 +151,8 @@ void MpvEventWorker::process()
             }
         }
 
+        spdlog::debug("mpv worker event id={} prop='{}' fmt={}", payload.id, payload.propertyName.constData(), payload.format);
+
         emit eventReady(payload);
 
         if (!m_running.load(std::memory_order_acquire) || event->event_id == MPV_EVENT_SHUTDOWN) {
@@ -203,21 +205,29 @@ bool VideoBackgroundWidget::loadFile(const QString &filePath)
 
     spdlog::info("Loading media {}", filePath);
 
+    // ensure mpv sees pause command after the new file is ready
+    int pausedFlag = 1;
+    mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag);
+    m_isPaused = true;
+
+    m_ignoreStopEndFile = true;
     QByteArray encoded = QFile::encodeName(filePath);
     const char *loadCmd[] = {"loadfile", encoded.constData(), "replace", nullptr};
     if (mpv_command(m_mpv, loadCmd) < 0) {
         spdlog::error("mpv failed to load file {}", filePath);
+        m_ignoreStopEndFile = false;
         return false;
     }
+    spdlog::info("mpv loadfile issued for {}", filePath);
 
     m_currentPath = filePath;
     m_hasMedia = true;
-    m_isPaused = false;
+    m_isPaused = true;
     m_position = 0.0;
     m_duration = 0.0;
 
     emit mediaLoaded(filePath);
-    emit playbackStateChanged(true);
+    emit playbackStateChanged(false);
     emit positionChanged(m_position, m_duration);
 
     return true;
@@ -478,6 +488,7 @@ void VideoBackgroundWidget::initializeMpv()
     m_mpvEventThread->start();
 
     mpv_observe_property(m_mpv, 0, "pause", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, 0, "eof-reached", MPV_FORMAT_FLAG);
     mpv_observe_property(m_mpv, 0, "duration", MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_mpv, 0, "hwdec-current", MPV_FORMAT_STRING);
     updateHardwareLogging();
@@ -556,12 +567,29 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
         if (!m_isPaused) {
             m_positionTimer.start();
         }
+        int pausedFlag = 0;
+        if (mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag) >= 0) {
+            if (m_isPaused) {
+                m_isPaused = false;
+                emit playbackStateChanged(true);
+            }
+            if (!m_positionTimer.isActive()) {
+                m_positionTimer.start();
+            }
+        }
+        m_ignoreStopEndFile = false;
         break;
     }
     case MPV_EVENT_END_FILE: {
         const auto reason = static_cast<mpv_end_file_reason>(payload.endFileReason);
+        spdlog::info("MPV end file reason={} ignoreStop={}", static_cast<int>(reason), m_ignoreStopEndFile);
         if (reason == MPV_END_FILE_REASON_STOP) {
-            break;
+            if (m_ignoreStopEndFile) {
+                m_ignoreStopEndFile = false;
+                break;
+            }
+        } else {
+            m_ignoreStopEndFile = false;
         }
 
         m_hasMedia = false;
@@ -590,6 +618,22 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
                         m_positionTimer.stop();
                     } else {
                         m_positionTimer.start();
+                    }
+                }
+            }
+        } else if (name == "eof-reached" && payload.format == MPV_FORMAT_FLAG) {
+            int eofFlag = 0;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_FLAG, &eofFlag) >= 0) {
+                bool reached = eofFlag != 0;
+                spdlog::info("mpv eof-reached={} ignoreStop={}", reached, m_ignoreStopEndFile);
+                if (reached) {
+                    m_ignoreStopEndFile = false;
+                    if (m_hasMedia) {
+                        m_hasMedia = false;
+                        m_isPaused = true;
+                        m_positionTimer.stop();
+                        emit playbackFinished();
+                        emit playbackStateChanged(false);
                     }
                 }
             }
