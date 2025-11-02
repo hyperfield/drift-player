@@ -1231,7 +1231,10 @@ void MainWindow::processSelectedFiles(const QStringList &files)
     }
 
     if (m_currentIndex == -1 && !m_tracks.isEmpty()) {
-        playTrack(0);
+        m_currentIndex = 0;
+        m_playlist->setCurrentRow(0);
+        updateNowPlaying(m_tracks.at(0).filePath);
+        updateTransportAvailability();
     }
 }
 
