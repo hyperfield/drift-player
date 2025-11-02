@@ -40,7 +40,9 @@
 #include <QStyle>
 #include <QMenu>
 #include <QMessageBox>
+#include <QGridLayout>
 #include <QVariant>
+#include <QGraphicsDropShadowEffect>
 #include <QTextStream>
 #include <QTimer>
 #include <QToolButton>
@@ -670,6 +672,38 @@ void MainWindow::handlePlaylistContextMenu(const QPoint &pos)
     m_contextMenuIndex = m_playlist->row(item);
 
     QMenu menu(this);
+    menu.setWindowFlags(menu.windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    menu.setAttribute(Qt::WA_TranslucentBackground);
+    menu.setStyleSheet(QStringLiteral(
+        "QMenu {\n"
+        "    background-color: rgba(18, 20, 28, 215);\n"
+        "    border: 1px solid rgba(255, 255, 255, 35);\n"
+        "    padding: 10px 8px;\n"
+        "    border-radius: 16px;\n"
+        "}\n"
+        "QMenu::item {\n"
+        "    color: rgba(245, 245, 250, 230);\n"
+        "    padding: 8px 20px;\n"
+        "    border-radius: 12px;\n"
+        "}\n"
+        "QMenu::item:selected {\n"
+        "    background-color: rgba(255, 255, 255, 55);\n"
+        "    color: rgba(255, 255, 255, 255);\n"
+        "}\n"
+        "QMenu::item:disabled {\n"
+        "    color: rgba(245, 245, 250, 120);\n"
+        "}\n"
+        "QMenu::separator {\n"
+        "    height: 1px;\n"
+        "    background: rgba(255, 255, 255, 35);\n"
+        "    margin: 6px 14px;\n"
+        "}\n"));
+    auto *shadow = new QGraphicsDropShadowEffect(&menu);
+    shadow->setBlurRadius(28);
+    shadow->setColor(QColor(0, 0, 0, 180));
+    shadow->setOffset(0, 8);
+    menu.setGraphicsEffect(shadow);
+
     QAction *deletePlaylistAction = menu.addAction(tr("Delete from Playlist"));
     QAction *deleteDiskAction = menu.addAction(tr("Delete from Disk"));
 
@@ -1104,18 +1138,15 @@ void MainWindow::setupUi()
     m_volumeLabel = new QLabel(tr("Volume"), m_controlsContainer);
     m_volumeLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
 
-    m_slidersLayout = new QHBoxLayout;
+    m_slidersLayout = new QGridLayout;
     m_slidersLayout->setContentsMargins(0, 0, 0, 0);
-    m_slidersLayout->setSpacing(12);
-    m_slidersLayout->addWidget(m_blurLabel);
-    m_slidersLayout->addWidget(m_blurSlider);
-    m_slidersLayout->addSpacing(8);
-    m_slidersLayout->addWidget(m_volumeLabel);
-    m_slidersLayout->addWidget(m_volumeSlider);
-    m_slidersLayout->setAlignment(m_blurLabel, Qt::AlignVCenter);
-    m_slidersLayout->setAlignment(m_volumeLabel, Qt::AlignVCenter);
-    m_slidersLayout->setStretch(1, 1);
-    m_slidersLayout->setStretch(3, 1);
+    m_slidersLayout->setHorizontalSpacing(12);
+    m_slidersLayout->setVerticalSpacing(6);
+    m_slidersLayout->addWidget(m_blurLabel, 0, 0, Qt::AlignRight | Qt::AlignVCenter);
+    m_slidersLayout->addWidget(m_blurSlider, 0, 1);
+    m_slidersLayout->addWidget(m_volumeLabel, 1, 0, Qt::AlignRight | Qt::AlignVCenter);
+    m_slidersLayout->addWidget(m_volumeSlider, 1, 1);
+    m_slidersLayout->setColumnStretch(1, 1);
 
     buttonsLayout->addLayout(m_actionsLayout);
     buttonsLayout->addSpacing(18);
@@ -1740,12 +1771,19 @@ void MainWindow::updateControlsLayoutMode(bool compact)
     }
 
     if (m_slidersLayout) {
-        m_slidersLayout->setSpacing(compact ? 8 : 12);
-        m_slidersLayout->setContentsMargins(compact ? 12 : 0, 0, 0, 0);
+        m_slidersLayout->setHorizontalSpacing(compact ? 8 : 12);
+        m_slidersLayout->setVerticalSpacing(compact ? 4 : 6);
+        const int margin = compact ? 12 : 0;
+        m_slidersLayout->setContentsMargins(margin, compact ? 4 : 0, margin, 0);
+        m_slidersLayout->setColumnMinimumWidth(0, compact ? 0 : 70);
+        m_slidersLayout->setColumnStretch(1, 1);
     }
 
     if (m_blurLabel) {
         m_blurLabel->setVisible(!compact);
+        if (m_slidersLayout) {
+            m_slidersLayout->setRowMinimumHeight(0, compact ? 0 : -1);
+        }
     }
 
     if (m_blurSlider) {
@@ -1754,6 +1792,9 @@ void MainWindow::updateControlsLayoutMode(bool compact)
 
     if (m_volumeLabel) {
         m_volumeLabel->setText(compact ? tr("Vol") : tr("Volume"));
+        if (m_slidersLayout) {
+            m_slidersLayout->setRowMinimumHeight(1, compact ? 0 : -1);
+        }
     }
 
     if (m_volumeSlider) {

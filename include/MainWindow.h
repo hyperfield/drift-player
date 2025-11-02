@@ -20,6 +20,7 @@ class QGraphicsOpacityEffect;
 class QPropertyAnimation;
 class QWidget;
 class QHBoxLayout;
+class QGridLayout;
 class QResizeEvent;
 class QFileSystemWatcher;
 
@@ -133,7 +134,7 @@ private:
     QWidget *m_controlsContainer = nullptr;
     QWidget *m_progressContainer = nullptr;
     QHBoxLayout *m_actionsLayout = nullptr;
-    QHBoxLayout *m_slidersLayout = nullptr;
+    QGridLayout *m_slidersLayout = nullptr;
     QFileSystemWatcher *m_playlistWatcher = nullptr;
     QFutureWatcher<double> *m_durationFutureWatcher = nullptr;
     QQueue<QString> m_durationProbeQueue;
