@@ -38,6 +38,8 @@
 #include <QStackedLayout>
 #include <QStandardPaths>
 #include <QStyle>
+#include <QMenu>
+#include <QMessageBox>
 #include <QVariant>
 #include <QTextStream>
 #include <QTimer>
@@ -654,6 +656,76 @@ void MainWindow::handleWatchedFileChanged(const QString &path)
     removeTrackByNormalizedPath(path);
 }
 
+void MainWindow::handlePlaylistContextMenu(const QPoint &pos)
+{
+    if (!m_playlist) {
+        return;
+    }
+
+    QListWidgetItem *item = m_playlist->itemAt(pos);
+    if (!item) {
+        return;
+    }
+
+    m_contextMenuIndex = m_playlist->row(item);
+
+    QMenu menu(this);
+    QAction *deletePlaylistAction = menu.addAction(tr("Delete from Playlist"));
+    QAction *deleteDiskAction = menu.addAction(tr("Delete from Disk"));
+
+    QAction *chosen = menu.exec(m_playlist->viewport()->mapToGlobal(pos));
+    if (chosen == deletePlaylistAction) {
+        handleDeleteTrackFromPlaylist();
+    } else if (chosen == deleteDiskAction) {
+        handleDeleteTrackFromDisk();
+    } else {
+        m_contextMenuIndex = -1;
+    }
+}
+
+void MainWindow::handleDeleteTrackFromPlaylist()
+{
+    const int index = m_contextMenuIndex;
+    m_contextMenuIndex = -1;
+    requestRemoveTrack(index);
+}
+
+void MainWindow::handleDeleteTrackFromDisk()
+{
+    const int index = m_contextMenuIndex;
+    m_contextMenuIndex = -1;
+    if (index < 0 || index >= m_tracks.size()) {
+        return;
+    }
+
+    const QString path = m_tracks.at(index).normalizedPath;
+    const QMessageBox::StandardButton response = QMessageBox::question(
+        this,
+        tr("Delete from Disk"),
+        tr("Are you sure you want to permanently delete this file?\n%1").arg(path),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+
+    if (response != QMessageBox::Yes) {
+        return;
+    }
+
+    bool removed = true;
+    if (!path.isEmpty() && QFile::exists(path)) {
+        QFile file(path);
+        if (!file.remove()) {
+            removed = false;
+            QMessageBox::warning(this,
+                                 tr("Unable to Delete"),
+                                 tr("Failed to remove file:\n%1").arg(path));
+        }
+    }
+
+    if (removed) {
+        requestRemoveTrack(index);
+    }
+}
+
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     handleFadeEvent(watched, event, m_playlist, m_playlistFadeTimer, m_playlistOpacity, m_playlistFadeAnimation);
@@ -723,6 +795,8 @@ void MainWindow::setupUi()
         }
     )");
     m_playlist->setItemDelegate(new PlaylistItemDelegate(m_playlist));
+    m_playlist->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_playlist, &QListWidget::customContextMenuRequested, this, &MainWindow::handlePlaylistContextMenu);
     m_playlistOpacity = new QGraphicsOpacityEffect(m_playlist);
     m_playlistOpacity->setOpacity(kInteractiveIdleOpacity);
     m_playlist->setGraphicsEffect(m_playlistOpacity);
@@ -1539,6 +1613,15 @@ void MainWindow::finalizeDurationFor(const QString &normalizedPath, double secon
     if (updated && !m_isRestoringPlaylist) {
         savePlaylistState();
     }
+}
+
+void MainWindow::requestRemoveTrack(int index)
+{
+    if (index < 0 || index >= m_tracks.size()) {
+        return;
+    }
+
+    removeTrackAt(index);
 }
 
 void MainWindow::logTracks(const char *tag) const

@@ -73,6 +73,9 @@ private slots:
     void handleProgressSliderMoved(int value);
     void handlePositionChanged(double position, double duration);
     void handleWatchedFileChanged(const QString &path);
+    void handlePlaylistContextMenu(const QPoint &pos);
+    void handleDeleteTrackFromPlaylist();
+    void handleDeleteTrackFromDisk();
 
 private:
     void setupUi();
@@ -108,6 +111,7 @@ private:
     void processDurationQueue();
     void finalizeDurationFor(const QString &normalizedPath, double seconds);
     void logTracks(const char *tag) const;
+    void requestRemoveTrack(int index);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -158,4 +162,5 @@ private:
     bool m_compactControls = false;
     bool m_isRestoringPlaylist = false;
     QSet<QString> m_watchedPaths;
+    int m_contextMenuIndex = -1;
 };
