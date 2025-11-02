@@ -107,6 +107,7 @@ private:
     void enqueueDurationProbe(const QString &normalizedPath);
     void processDurationQueue();
     void finalizeDurationFor(const QString &normalizedPath, double seconds);
+    void logTracks(const char *tag) const;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 

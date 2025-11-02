@@ -101,11 +101,13 @@ QString formatTime(double seconds)
 double probeDurationWithMpv(const QString &path)
 {
     if (path.isEmpty()) {
+        spdlog::debug("probeDurationWithMpv: empty path");
         return -1.0;
     }
 
     QFileInfo info(path);
     if (!info.exists()) {
+        spdlog::debug("probeDurationWithMpv: '{}' does not exist", path);
         return -1.0;
     }
 
@@ -121,6 +123,7 @@ double probeDurationWithMpv(const QString &path)
 
     std::unique_ptr<mpv_handle, MpvHandleDeleter> handle(mpv_create());
     if (!handle) {
+        spdlog::warn("probeDurationWithMpv: mpv_create failed");
         return -1.0;
     }
 
@@ -141,29 +144,78 @@ double probeDurationWithMpv(const QString &path)
     QByteArray encoded = QFile::encodeName(path);
     const char *loadCmd[] = {"loadfile", encoded.constData(), nullptr};
     if (mpv_command(handle.get(), loadCmd) < 0) {
+        spdlog::warn("probeDurationWithMpv: mpv loadfile failed for '{}'", path);
         return -1.0;
     }
 
-    double duration = -1.0;
+    int pauseFlag = 0;
+    mpv_set_property(handle.get(), "pause", MPV_FORMAT_FLAG, &pauseFlag);
 
-    while (true) {
-        mpv_event *event = mpv_wait_event(handle.get(), 5.0);
+    auto fetchDuration = [&]() -> double {
+        double value = 0.0;
+        if (mpv_get_property(handle.get(), "duration", MPV_FORMAT_DOUBLE, &value) >= 0 && std::isfinite(value) && value > 0.0) {
+            return value;
+        }
+        return -1.0;
+    };
+
+    double duration = fetchDuration();
+
+    // Poll mpv events briefly to give it time to populate metadata.
+    const double timeoutSeconds = 0.5;
+    const int maxIterations = 20;
+    for (int i = 0; i < maxIterations && duration <= 0.0; ++i) {
+        mpv_event *event = mpv_wait_event(handle.get(), timeoutSeconds);
         if (!event) {
-            break;
+            continue;
         }
 
-        if (event->event_id == MPV_EVENT_FILE_LOADED) {
-            double value = 0.0;
-            if (mpv_get_property(handle.get(), "duration", MPV_FORMAT_DOUBLE, &value) >= 0 && std::isfinite(value) && value > 0.0) {
-                duration = value;
-            }
+        spdlog::debug("probeDurationWithMpv: event id={} for '{}'", event->event_id, path);
+
+        if (event->event_id == MPV_EVENT_FILE_LOADED || event->event_id == MPV_EVENT_PROPERTY_CHANGE) {
+            duration = fetchDuration();
         }
 
-        if (event->event_id == MPV_EVENT_END_FILE || event->event_id == MPV_EVENT_FILE_LOADED || event->event_id == MPV_EVENT_SHUTDOWN) {
+        if (event->event_id == MPV_EVENT_END_FILE || event->event_id == MPV_EVENT_SHUTDOWN) {
+            duration = fetchDuration();
             break;
         }
     }
 
+    if (duration <= 0.0) {
+        // fallback: try ffprobe
+        QStringList arguments;
+        arguments << "-v" << "error"
+                  << "-select_streams" << "v:0"
+                  << "-show_entries" << "format=duration"
+                  << "-of" << "default=noprint_wrappers=1:nokey=1"
+                  << path;
+
+        QProcess process;
+        process.setProgram("ffprobe");
+        process.setArguments(arguments);
+        process.start();
+        if (process.waitForFinished(5000)) {
+            QByteArray output = process.readAllStandardOutput().trimmed();
+            if (!output.isEmpty()) {
+                bool ok = false;
+                double ffprobeDuration = output.toDouble(&ok);
+                if (ok && ffprobeDuration > 0.0) {
+                    duration = ffprobeDuration;
+                    spdlog::debug("probeDurationWithMpv: ffprobe duration for '{}' = {}", path, duration);
+                } else {
+                    spdlog::warn("probeDurationWithMpv: ffprobe returned non-numeric duration '{}' for '{}'", output.constData(), path);
+                }
+            } else {
+                spdlog::warn("probeDurationWithMpv: ffprobe produced no output for '{}'. stderr='{}'",
+                             path, process.readAllStandardError().constData());
+            }
+        } else {
+            spdlog::warn("probeDurationWithMpv: ffprobe timed out or failed for '{}'", path);
+        }
+    }
+
+    spdlog::debug("probeDurationWithMpv: duration for '{}' = {}", path, duration);
     return duration;
 }
 
@@ -1395,13 +1447,13 @@ void MainWindow::savePlaylistState()
         paths.append(entry.normalizedPath);
     }
 
-    m_settings.setValue("playlist/paths", paths);
-
     QVariantList durations;
     durations.reserve(m_tracks.size());
     for (const TrackEntry &entry : m_tracks) {
         durations.append(entry.durationSeconds);
     }
+
+    m_settings.setValue("playlist/paths", paths);
     m_settings.setValue("playlist/durations", durations);
 }
 
@@ -1483,6 +1535,15 @@ void MainWindow::finalizeDurationFor(const QString &normalizedPath, double secon
 
     if (updated && !m_isRestoringPlaylist) {
         savePlaylistState();
+    }
+}
+
+void MainWindow::logTracks(const char *tag) const
+{
+    spdlog::debug("[{}] tracks={} currentIndex={}", tag, m_tracks.size(), m_currentIndex);
+    for (int i = 0; i < m_tracks.size(); ++i) {
+        const auto &t = m_tracks.at(i);
+        spdlog::debug("  [{}] title='{}' normalized='{}' duration={}", i, t.title, t.normalizedPath, t.durationSeconds);
     }
 }
 
