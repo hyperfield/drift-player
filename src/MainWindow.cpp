@@ -54,6 +54,7 @@
 #include <QColor>
 #include <QtConcurrent/QtConcurrentRun>
 #include <memory>
+#include <string>
 
 extern "C" {
 #include <mpv/client.h>
@@ -443,7 +444,17 @@ void MainWindow::handleAddDialogHelperError(QProcess::ProcessError error)
 void MainWindow::handlePlayPause()
 {
     if (!m_videoWidget->hasMedia() && !m_tracks.isEmpty()) {
-        playTrack(0);
+        int targetIndex = m_currentIndex;
+        if (targetIndex < 0 || targetIndex >= m_tracks.size()) {
+            targetIndex = 0;
+        }
+        if (m_restorePlaybackPending && !m_restoreShouldPlay && targetIndex >= 0 && targetIndex < m_tracks.size()) {
+            const QString &targetPath = m_tracks.at(targetIndex).normalizedPath;
+            if (targetPath == m_restoreNormalizedPath) {
+                m_restoreShouldPlay = true;
+            }
+        }
+        playTrack(targetIndex);
         return;
     }
 
@@ -484,6 +495,8 @@ void MainWindow::handleShuffleToggled()
 {
     m_shuffleEnabled = !m_shuffleEnabled;
     m_shuffleButton->setChecked(m_shuffleEnabled);
+    invalidateNextIndexCache();
+    refreshNextLabel();
 }
 
 void MainWindow::handleRepeatMode()
@@ -501,10 +514,16 @@ void MainWindow::handleRepeatMode()
     }
 
     updateRepeatButton();
+    invalidateNextIndexCache();
+    refreshNextLabel();
 }
 
 void MainWindow::handlePlaybackStateChanged(bool playing)
 {
+    if (m_restorePlaybackPending && !m_restoreShouldPlay && !m_restorePositionApplied && playing && m_videoWidget) {
+        m_videoWidget->pause();
+        playing = false;
+    }
     updatePlayPauseButton(playing);
     updateTransportAvailability();
     updateBassEffectState();
@@ -607,6 +626,71 @@ void MainWindow::handleProgressSliderMoved(int value)
 
 void MainWindow::handlePositionChanged(double position, double duration)
 {
+    if (m_restorePlaybackPending && !m_restoreNormalizedPath.isEmpty()) {
+        const bool currentValid = (m_currentIndex >= 0 && m_currentIndex < m_tracks.size());
+        const QString currentNormalized = currentValid ? m_tracks.at(m_currentIndex).normalizedPath : QString();
+        const std::string currentNormalizedLog = currentNormalized.toStdString();
+        if (!currentValid) {
+            // We are still waiting for the playlist selection to catch up; keep the restore state.
+            spdlog::debug("Playback restore pending; waiting for playlist selection (index now {})", m_currentIndex);
+        } else if (currentNormalized != m_restoreNormalizedPath) {
+            spdlog::info("Cancelling playback restore; current track '{}' differs from saved '{}'",
+                         currentNormalizedLog,
+                         m_restoreNormalizedPath.toStdString());
+            clearPendingRestore();
+        } else if (!m_restorePositionApplied) {
+            const bool readyForSeek = (duration > 0.01) || (m_restoreSeekTarget <= 0.01);
+            if (!readyForSeek) {
+                spdlog::debug("Playback restore pending for '{}' - waiting for duration (have={}, target={})",
+                              currentNormalizedLog,
+                              duration,
+                              m_restoreSeekTarget);
+            } else if (m_videoWidget) {
+                double target = m_restoreSeekTarget;
+                if (duration > 0.5 && target > duration - 0.25) {
+                    target = std::max(0.0, duration - 0.25);
+                }
+                if (target < 0.0 || !std::isfinite(target)) {
+                    target = 0.0;
+                }
+                m_restoreSeekTarget = target;
+                if (target > 0.01) {
+                    spdlog::info("Seeking to {}s to restore playback for '{}'", target, currentNormalizedLog);
+                    QMetaObject::invokeMethod(m_videoWidget, [widget = m_videoWidget, target]() {
+                        widget->seek(target);
+                    }, Qt::QueuedConnection);
+                } else {
+                    spdlog::info("Restore target near start ({}s) for '{}'; skipping seek", target, currentNormalizedLog);
+                }
+
+                if (m_restoreShouldPlay) {
+                    spdlog::info("Resuming playback for '{}' after restore", currentNormalizedLog);
+                    QMetaObject::invokeMethod(m_videoWidget, &VideoBackgroundWidget::play, Qt::QueuedConnection);
+                    QTimer::singleShot(50, m_videoWidget, &VideoBackgroundWidget::requestFrame);
+                } else {
+                    spdlog::info("Keeping '{}' paused after restore", currentNormalizedLog);
+                    QMetaObject::invokeMethod(m_videoWidget, &VideoBackgroundWidget::pause, Qt::QueuedConnection);
+                    QMetaObject::invokeMethod(m_videoWidget, &VideoBackgroundWidget::requestFrame, Qt::QueuedConnection);
+                    QTimer::singleShot(50, m_videoWidget, &VideoBackgroundWidget::requestFrame);
+                }
+                m_restorePositionApplied = true;
+                if (!m_restoreShouldPlay) {
+                    // When restoring a paused session we can drop the pending state immediately so the UI responds normally.
+                    clearPendingRestore();
+                }
+            }
+        } else {
+            const double epsilon = std::max(0.15, duration * 0.01);
+            if (std::fabs(position - m_restoreSeekTarget) <= epsilon) {
+                spdlog::info("Playback restore complete for '{}' at {}s (target {}s)",
+                             currentNormalizedLog,
+                             position,
+                             m_restoreSeekTarget);
+                clearPendingRestore();
+            }
+        }
+    }
+
     m_lastDuration = duration;
 
     if (m_progressSlider) {
@@ -1172,10 +1256,25 @@ void MainWindow::setupUi()
         letter-spacing: 0.4px;
     )");
 
+    m_nextLabel = new QLabel(tr("Next: --"), m_controlsContainer);
+    m_nextLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    m_nextLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_nextLabel->setMinimumHeight(24);
+    m_nextLabel->setWordWrap(true);
+    m_nextLabel->setStyleSheet(R"(
+        color: rgba(200, 205, 215, 220);
+        background-color: rgba(10, 10, 18, 150);
+        padding: 4px 18px;
+        border-radius: 14px;
+        font-size: 12px;
+        letter-spacing: 0.2px;
+    )");
+
     auto *controlsLayout = new QVBoxLayout(m_controlsContainer);
     controlsLayout->setContentsMargins(0, 0, 0, 0);
     controlsLayout->setSpacing(12);
     controlsLayout->addWidget(m_titleLabel);
+    controlsLayout->addWidget(m_nextLabel);
 
     auto *buttonsLayout = new QHBoxLayout;
     buttonsLayout->setContentsMargins(0, 0, 0, 0);
@@ -1343,8 +1442,11 @@ void MainWindow::loadSettings()
     handleBassThresholdChanged(bassThreshold);
 
     restorePlaylistState();
+    restorePlaybackState();
     updateTransportAvailability();
     updateBassEffectState();
+    invalidateNextIndexCache();
+    refreshNextLabel();
 }
 
 void MainWindow::saveSettings()
@@ -1359,6 +1461,35 @@ void MainWindow::saveSettings()
         m_settings.setValue("visual/bassThreshold", m_bassSlider->value());
     }
     savePlaylistState();
+    if (m_currentIndex >= 0 && m_currentIndex < m_tracks.size()) {
+        const TrackEntry &entry = m_tracks.at(m_currentIndex);
+        m_settings.setValue("playback/currentPath", entry.normalizedPath);
+
+        double position = 0.0;
+        bool wasPlaying = false;
+        if (m_videoWidget && m_videoWidget->hasMedia()) {
+            position = m_videoWidget->position();
+            if (!std::isfinite(position) || position < 0.0) {
+                position = 0.0;
+            }
+            wasPlaying = !m_videoWidget->isPaused();
+        } else if (!m_restoreNormalizedPath.isEmpty() && entry.normalizedPath == m_restoreNormalizedPath) {
+            position = m_restoreSeekTarget;
+            wasPlaying = m_restoreShouldPlay;
+        }
+
+        spdlog::info("Persisting playback resume path='{}' position={}s playing={}",
+                     entry.normalizedPath,
+                     position,
+                     wasPlaying);
+        m_settings.setValue("playback/position", position);
+        m_settings.setValue("playback/wasPlaying", wasPlaying);
+    } else {
+        spdlog::info("Clearing playback resume state (no active track)");
+        m_settings.remove("playback/currentPath");
+        m_settings.remove("playback/position");
+        m_settings.remove("playback/wasPlaying");
+    }
     m_settings.sync();
 }
 
@@ -1424,17 +1555,25 @@ void MainWindow::processSelectedFiles(const QStringList &files)
 
     spdlog::info("Adding {} tracks", newTracks.size());
     QElapsedTimer timer;
+    bool playlistChanged = false;
     for (const QString &file : newTracks) {
         timer.start();
         if (addTrack(file)) {
             spdlog::info("Queued '{}' in {} ms", file, timer.elapsed());
             const QString normalized = normalizedPathFor(file);
             enqueueDurationProbe(normalized);
+            playlistChanged = true;
         }
+    }
+
+    if (playlistChanged) {
+        invalidateNextIndexCache();
+        refreshNextLabel();
     }
 
     if (m_currentIndex == -1 && !m_tracks.isEmpty()) {
         m_currentIndex = 0;
+        invalidateNextIndexCache();
         m_playlist->setCurrentRow(0);
         updateNowPlaying(m_tracks.at(0).filePath);
         updateTransportAvailability();
@@ -1448,13 +1587,32 @@ void MainWindow::playTrack(int index)
         return;
     }
 
+    if (!m_videoWidget) {
+        spdlog::error("Video widget unavailable; cannot play track index={}", index);
+        clearPendingRestore();
+        return;
+    }
+
     const TrackEntry &entry = m_tracks.at(index);
+    const bool restoringTrack = m_restorePlaybackPending && !m_restoreNormalizedPath.isEmpty()
+                                && entry.normalizedPath == m_restoreNormalizedPath;
+
+    if (!restoringTrack) {
+        clearPendingRestore();
+    }
+
+    m_videoWidget->setAutoStartOnLoad(restoringTrack ? m_restoreShouldPlay : true);
+
     if (!m_videoWidget->loadFile(entry.filePath)) {
         spdlog::error("Failed to load track '{}'", entry.filePath);
+        if (restoringTrack) {
+            clearPendingRestore();
+        }
         return;
     }
 
     m_currentIndex = index;
+    invalidateNextIndexCache();
     m_playlist->setCurrentRow(index);
     updateNowPlaying(entry.filePath);
     updateTransportAvailability();
@@ -1463,31 +1621,45 @@ void MainWindow::playTrack(int index)
 
 int MainWindow::resolveNextIndex() const
 {
-    if (m_tracks.isEmpty()) {
-        return -1;
+    if (m_nextIndexCacheValid) {
+        return m_nextIndexCache;
     }
 
-    if (m_repeatMode == RepeatMode::One && m_currentIndex >= 0) {
-        return m_currentIndex;
-    }
+    int nextIndex = -1;
+    const bool haveTracks = !m_tracks.isEmpty();
+    const bool currentValid = (m_currentIndex >= 0 && m_currentIndex < m_tracks.size());
 
-    if (m_shuffleEnabled && m_tracks.size() > 1) {
-        int next = m_currentIndex;
-        while (next == m_currentIndex) {
-            next = static_cast<int>(QRandomGenerator::global()->bounded(m_tracks.size()));
+    if (!haveTracks) {
+        nextIndex = -1;
+    } else if (m_repeatMode == RepeatMode::One && currentValid) {
+        nextIndex = m_currentIndex;
+    } else if (m_shuffleEnabled && m_tracks.size() > 1 && currentValid) {
+        int candidate = m_currentIndex;
+        while (candidate == m_currentIndex) {
+            candidate = static_cast<int>(QRandomGenerator::global()->bounded(m_tracks.size()));
         }
-        return next;
-    }
-
-    int next = m_currentIndex + 1;
-    if (next >= m_tracks.size()) {
-        if (m_repeatMode == RepeatMode::All) {
-            next = 0;
+        nextIndex = candidate;
+    } else if (currentValid) {
+        int candidate = m_currentIndex + 1;
+        if (candidate >= m_tracks.size()) {
+            if (m_repeatMode == RepeatMode::All) {
+                candidate = 0;
+            } else {
+                candidate = -1;
+            }
+        }
+        nextIndex = candidate;
+    } else {
+        if (m_shuffleEnabled && m_tracks.size() > 1) {
+            nextIndex = static_cast<int>(QRandomGenerator::global()->bounded(m_tracks.size()));
         } else {
-            next = -1;
+            nextIndex = haveTracks ? 0 : -1;
         }
     }
-    return next;
+
+    m_nextIndexCache = nextIndex;
+    m_nextIndexCacheValid = true;
+    return m_nextIndexCache;
 }
 
 int MainWindow::resolvePreviousIndex() const
@@ -1568,6 +1740,10 @@ void MainWindow::removeTrackAt(int index)
     const TrackEntry entry = m_tracks.at(index);
     spdlog::info("Removing track '{}' (normalized='{}')", entry.filePath, entry.normalizedPath);
 
+    if (!m_restoreNormalizedPath.isEmpty() && m_restoreNormalizedPath == entry.normalizedPath) {
+        clearPendingRestore();
+    }
+
     stopWatchingTrack(entry.normalizedPath);
     m_knownPaths.remove(entry.normalizedPath);
     m_tracks.removeAt(index);
@@ -1578,6 +1754,8 @@ void MainWindow::removeTrackAt(int index)
     }
 
     QMetaObject::invokeMethod(this, &MainWindow::processDurationQueue, Qt::QueuedConnection);
+
+    invalidateNextIndexCache();
 
     if (m_playlist) {
         if (QListWidgetItem *item = m_playlist->takeItem(index)) {
@@ -1605,6 +1783,7 @@ void MainWindow::removeTrackAt(int index)
     savePlaylistState();
     updateTransportAvailability();
     refreshPlaylistStyles();
+    refreshNextLabel();
 }
 
 void MainWindow::restorePlaylistState()
@@ -1646,6 +1825,142 @@ void MainWindow::restorePlaylistState()
 
     savePlaylistState();
     refreshPlaylistStyles();
+    invalidateNextIndexCache();
+    refreshNextLabel();
+}
+
+void MainWindow::restorePlaybackState()
+{
+    const QString normalized = m_settings.value("playback/currentPath").toString();
+    if (normalized.isEmpty()) {
+        spdlog::info("No playback resume data available");
+        clearPendingRestore();
+        return;
+    }
+
+    const int index = indexForNormalizedPath(normalized);
+    if (index < 0) {
+        spdlog::info("Skipping playback restore; saved track '{}' not present", normalized);
+        m_settings.remove("playback/currentPath");
+        m_settings.remove("playback/position");
+        m_settings.remove("playback/wasPlaying");
+        clearPendingRestore();
+        return;
+    }
+
+    double position = m_settings.value("playback/position", 0.0).toDouble();
+    if (!std::isfinite(position) || position < 0.0) {
+        position = 0.0;
+    }
+
+    m_restoreNormalizedPath = normalized;
+    m_restoreSeekTarget = position;
+    const bool storedWasPlaying = m_settings.value("playback/wasPlaying", false).toBool();
+    if (storedWasPlaying) {
+        spdlog::info("Saved session was playing, but auto-resume is disabled; restoring paused.");
+    }
+    m_restoreShouldPlay = false;
+    spdlog::info("Restoring playback for '{}' (index {}) position={}s (auto-play disabled)",
+                 normalized.toStdString(),
+                 index,
+                 m_restoreSeekTarget);
+    m_restorePositionApplied = false;
+    m_restorePlaybackPending = true;
+
+    m_currentIndex = index;
+    if (m_playlist) {
+        m_playlist->setCurrentRow(index);
+    }
+    refreshPlaylistStyles();
+    updateNowPlaying(m_tracks.at(index).filePath);
+
+    double durationSeconds = m_tracks.at(index).durationSeconds;
+    if (durationSeconds <= 0.0) {
+        durationSeconds = 0.0;
+    }
+    applyRestoredProgressToUi(m_restoreSeekTarget, durationSeconds);
+
+    invalidateNextIndexCache();
+    refreshNextLabel();
+    spdlog::info("Ready to resume '{}'; press Play to continue at {}s",
+                 normalized.toStdString(),
+                 m_restoreSeekTarget);
+}
+
+int MainWindow::indexForNormalizedPath(const QString &normalizedPath) const
+{
+    if (normalizedPath.isEmpty()) {
+        return -1;
+    }
+
+    for (int i = 0; i < m_tracks.size(); ++i) {
+        if (m_tracks.at(i).normalizedPath == normalizedPath) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void MainWindow::clearPendingRestore()
+{
+    m_restorePlaybackPending = false;
+    m_restorePositionApplied = false;
+    m_restoreSeekTarget = 0.0;
+    m_restoreShouldPlay = false;
+    if (!m_restoreNormalizedPath.isEmpty()) {
+        spdlog::debug("Clearing playback restore state for '{}'", m_restoreNormalizedPath);
+    }
+    m_restoreNormalizedPath.clear();
+    if (m_videoWidget) {
+        m_videoWidget->setAutoStartOnLoad(true);
+    }
+}
+
+void MainWindow::applyRestoredProgressToUi(double position, double durationSeconds)
+{
+    if (!std::isfinite(position) || position < 0.0) {
+        position = 0.0;
+    }
+    if (!std::isfinite(durationSeconds) || durationSeconds < 0.0) {
+        durationSeconds = 0.0;
+    }
+    if (durationSeconds > 0.0 && position > durationSeconds) {
+        position = durationSeconds;
+    }
+
+    m_lastDuration = durationSeconds;
+    m_progressSliderPressed = false;
+
+    if (m_progressSlider) {
+        const QSignalBlocker blocker(m_progressSlider);
+        if (durationSeconds > 0.0) {
+            if (!m_progressSlider->isEnabled()) {
+                m_progressSlider->setEnabled(true);
+            }
+            const int maxValue = m_progressSlider->maximum();
+            if (maxValue > 0) {
+                double ratio = position / durationSeconds;
+                if (!std::isfinite(ratio) || ratio < 0.0) {
+                    ratio = 0.0;
+                } else if (ratio > 1.0) {
+                    ratio = 1.0;
+                }
+                const int sliderValue = static_cast<int>(ratio * maxValue + 0.5);
+                m_progressSlider->setValue(std::clamp(sliderValue, 0, maxValue));
+            } else {
+                m_progressSlider->setValue(0);
+            }
+        } else {
+            m_progressSlider->setValue(0);
+            m_progressSlider->setEnabled(false);
+        }
+    }
+
+    if (m_timeLabel) {
+        const QString current = formatTime(position);
+        const QString total = formatTime(durationSeconds);
+        m_timeLabel->setText(QStringLiteral("%1 / %2").arg(current, total));
+    }
 }
 
 void MainWindow::savePlaylistState()
@@ -2035,6 +2350,7 @@ void MainWindow::updateNowPlaying(const QString &filePath)
         if (m_timeLabel) {
             m_timeLabel->setText(QStringLiteral("00:00 / 00:00"));
         }
+        refreshNextLabel();
         updateTransportAvailability();
         return;
     }
@@ -2042,6 +2358,7 @@ void MainWindow::updateNowPlaying(const QString &filePath)
     const QString title = displayNameForFile(filePath);
     m_titleLabel->setText(tr("Now Playing: %1").arg(title));
     m_titleLabel->setToolTip(title);
+    refreshNextLabel();
     m_lastDuration = 0.0;
     m_progressSliderPressed = false;
     if (m_progressSlider) {
@@ -2053,6 +2370,42 @@ void MainWindow::updateNowPlaying(const QString &filePath)
         m_timeLabel->setText(QStringLiteral("00:00 / 00:00"));
     }
     updateTransportAvailability();
+}
+
+void MainWindow::refreshNextLabel()
+{
+    if (!m_nextLabel) {
+        return;
+    }
+
+    if (m_currentIndex < 0 || m_tracks.isEmpty()) {
+        setNextLabelText(-1);
+        return;
+    }
+
+    setNextLabelText(resolveNextIndex());
+}
+
+void MainWindow::setNextLabelText(int nextIndex)
+{
+    if (!m_nextLabel) {
+        return;
+    }
+
+    if (nextIndex >= 0 && nextIndex < m_tracks.size()) {
+        const QString nextTitle = displayNameForFile(m_tracks.at(nextIndex).filePath);
+        m_nextLabel->setText(tr("Next: %1").arg(nextTitle));
+        m_nextLabel->setToolTip(nextTitle);
+    } else {
+        m_nextLabel->setText(tr("Next: --"));
+        m_nextLabel->setToolTip(QString());
+    }
+}
+
+void MainWindow::invalidateNextIndexCache()
+{
+    m_nextIndexCacheValid = false;
+    m_nextIndexCache = -1;
 }
 
 bool MainWindow::handleFadeEvent(QObject *watched,

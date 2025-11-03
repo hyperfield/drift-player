@@ -120,6 +120,13 @@ private:
     void requestRemoveTrack(int index);
     void updatePlaylistRowState(int index, QListWidgetItem *item);
     void updateBassEffectState();
+    void refreshNextLabel();
+    void setNextLabelText(int nextIndex);
+    void invalidateNextIndexCache();
+    void restorePlaybackState();
+    [[nodiscard]] int indexForNormalizedPath(const QString &normalizedPath) const;
+    void clearPendingRestore();
+    void applyRestoredProgressToUi(double position, double durationSeconds);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -140,6 +147,7 @@ private:
     QLabel *m_bassLabel = nullptr;
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
+    QLabel *m_nextLabel = nullptr;
     QWidget *m_controlsContainer = nullptr;
     QWidget *m_progressContainer = nullptr;
     QHBoxLayout *m_actionsLayout = nullptr;
@@ -175,4 +183,11 @@ private:
     bool m_isRestoringPlaylist = false;
     QSet<QString> m_watchedPaths;
     int m_contextMenuIndex = -1;
+    mutable bool m_nextIndexCacheValid = false;
+    mutable int m_nextIndexCache = -1;
+    bool m_restorePlaybackPending = false;
+    bool m_restorePositionApplied = false;
+    double m_restoreSeekTarget = 0.0;
+    bool m_restoreShouldPlay = false;
+    QString m_restoreNormalizedPath;
 };

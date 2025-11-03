@@ -283,11 +283,13 @@ bool VideoBackgroundWidget::loadFile(const QString &filePath)
 
 void VideoBackgroundWidget::play()
 {
+    spdlog::debug("VideoBackgroundWidget::play() current paused={}", m_isPaused);
     setPaused(false);
 }
 
 void VideoBackgroundWidget::pause()
 {
+    spdlog::debug("VideoBackgroundWidget::pause() current paused={}", m_isPaused);
     setPaused(true);
 }
 
@@ -298,12 +300,14 @@ void VideoBackgroundWidget::setPaused(bool paused)
     }
 
     int flag = paused ? 1 : 0;
-    if (mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &flag) < 0) {
-        qWarning() << "Failed to set pause state";
+    const int rc = mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &flag);
+    if (rc < 0) {
+        spdlog::warn("Failed to set pause={} (rc={})", paused, rc);
         return;
     }
 
     m_isPaused = paused;
+    spdlog::debug("Pause state updated paused={}", m_isPaused);
     emit playbackStateChanged(!m_isPaused);
 }
 
@@ -353,6 +357,17 @@ void VideoBackgroundWidget::setBassEnabled(bool enabled)
         m_bassStripes.clear();
         scheduleUpdate();
     }
+}
+
+void VideoBackgroundWidget::setAutoStartOnLoad(bool autoStart)
+{
+    m_autoStartOnLoad = autoStart;
+}
+
+void VideoBackgroundWidget::requestFrame()
+{
+    spdlog::debug("VideoBackgroundWidget::requestFrame() scheduling update");
+    scheduleUpdate();
 }
 
 bool VideoBackgroundWidget::hasMedia() const
@@ -410,6 +425,7 @@ void VideoBackgroundWidget::initializeGL()
 void VideoBackgroundWidget::seek(double seconds)
 {
     if (!m_mpv || !m_hasMedia) {
+        spdlog::warn("Seek ignored seconds={} m_mpv={} hasMedia={}", seconds, static_cast<bool>(m_mpv), m_hasMedia);
         return;
     }
 
@@ -417,14 +433,18 @@ void VideoBackgroundWidget::seek(double seconds)
         seconds = 0.0;
     }
 
-    if (mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &seconds) < 0) {
-        qWarning() << "Failed to seek" << seconds;
+    const int rc = mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &seconds);
+    if (rc < 0) {
+        spdlog::warn("Failed to seek to {} (rc={})", seconds, rc);
+    } else {
+        spdlog::debug("Seek requested to {} (rc={})", seconds, rc);
     }
 }
 
 void VideoBackgroundWidget::paintGL()
 {
     if (!m_mpvRender) {
+        spdlog::warn("paintGL: render context missing");
         return;
     }
 
@@ -459,10 +479,12 @@ void VideoBackgroundWidget::paintGL()
         {MPV_RENDER_PARAM_INVALID, nullptr}
     };
 
-    if (mpv_render_context_render(m_mpvRender, params) < 0) {
-        qWarning() << "mpv failed to render frame";
+    const int renderRc = mpv_render_context_render(m_mpvRender, params);
+    if (renderRc < 0) {
+        spdlog::warn("mpv failed to render frame rc={}", renderRc);
         return;
     }
+    spdlog::debug("paintGL: rendered frame {}x{} blur={}", targetWidth, targetHeight, useBlur);
 
     if (useBlur) {
         renderBlurPass();
@@ -627,6 +649,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
 {
     switch (payload.id) {
     case MPV_EVENT_FILE_LOADED: {
+        spdlog::debug("MPV_EVENT_FILE_LOADED path='{}' autoStart={}", m_currentPath.toStdString(), m_autoStartOnLoad);
         double duration = 0.0;
         if (mpv_get_property(m_mpv, "duration", MPV_FORMAT_DOUBLE, &duration) >= 0 && std::isfinite(duration)) {
             if (duration < 0.0) {
@@ -646,22 +669,35 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
         } else {
             m_position = 0.0;
         }
+        spdlog::debug("File loaded duration={} position={} paused={}", m_duration, m_position, m_isPaused);
 
         emit positionChanged(m_position, m_duration);
         updateHardwareLogging();
         if (!m_isPaused) {
             m_positionTimer.start();
         }
-        int pausedFlag = 0;
-        if (mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag) >= 0) {
-            if (m_isPaused) {
-                m_isPaused = false;
-                emit playbackStateChanged(true);
+        if (m_autoStartOnLoad) {
+            int pausedFlag = 0;
+            if (mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag) >= 0) {
+                if (m_isPaused) {
+                    m_isPaused = false;
+                    emit playbackStateChanged(true);
+                }
+                if (!m_positionTimer.isActive()) {
+                    m_positionTimer.start();
+                }
             }
-            if (!m_positionTimer.isActive()) {
-                m_positionTimer.start();
+        } else {
+            int pausedFlag = 1;
+            mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag);
+            if (!m_isPaused) {
+                m_isPaused = true;
+                emit playbackStateChanged(false);
             }
+            m_positionTimer.stop();
         }
+        scheduleUpdate();
+        m_autoStartOnLoad = true;
         m_ignoreStopEndFile = false;
         break;
     }
@@ -697,6 +733,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
             if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_FLAG, &pausedFlag) >= 0) {
                 bool paused = pausedFlag != 0;
                 if (paused != m_isPaused) {
+                    spdlog::debug("pause property changed -> {}", paused);
                     m_isPaused = paused;
                     emit playbackStateChanged(!m_isPaused);
                     if (m_isPaused) {
@@ -731,6 +768,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
             } else {
                 duration = 0.0;
             }
+            spdlog::debug("duration property change -> {}", duration);
 
             if (std::fabs(m_duration - duration) > 0.01) {
                 m_duration = duration;
@@ -747,6 +785,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
             }
 
             m_position = position;
+            spdlog::debug("time-pos property change -> {}", m_position);
             emit positionChanged(m_position, m_duration);
         } else if (name == "hwdec-current" && payload.format == MPV_FORMAT_STRING) {
             char *value = nullptr;

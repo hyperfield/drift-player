@@ -47,6 +47,8 @@ public:
     void seek(double seconds);
     void setBassThreshold(double threshold);
     void setBassEnabled(bool enabled);
+    void setAutoStartOnLoad(bool autoStart);
+    void requestFrame();
 
     [[nodiscard]] bool hasMedia() const;
     [[nodiscard]] bool isPaused() const;
@@ -114,6 +116,7 @@ private:
     bool m_lastHwdecState = false;
     QString m_mpvShaderPath;
     bool m_mpvShaderActive = false;
+    bool m_autoStartOnLoad = true;
     QTimer m_positionTimer;
     bool m_ignoreStopEndFile = false;
     QTimer m_bassTimer;
