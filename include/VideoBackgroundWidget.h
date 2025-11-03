@@ -5,6 +5,8 @@
 #include <QScopedPointer>
 #include <QByteArray>
 #include <QTimer>
+#include <QVector>
+#include <QRectF>
 #include <memory>
 
 extern "C" {
@@ -43,6 +45,8 @@ public:
     void setBlurAmount(float amount);
     float blurAmount() const;
     void seek(double seconds);
+    void setBassThreshold(double threshold);
+    void setBassEnabled(bool enabled);
 
     [[nodiscard]] bool hasMedia() const;
     [[nodiscard]] bool isPaused() const;
@@ -112,4 +116,10 @@ private:
     bool m_mpvShaderActive = false;
     QTimer m_positionTimer;
     bool m_ignoreStopEndFile = false;
+    QTimer m_bassTimer;
+    double m_bassThreshold = 0.6;
+    double m_bassFlash = 0.0;
+    double m_bassPhase = 0.0;
+    bool m_bassEnabled = true;
+    QVector<QRectF> m_bassStripes;
 };

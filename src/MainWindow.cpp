@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "VideoBackgroundWidget.h"
+#include "BassVisualizerWidget.h"
 
 #include <QAbstractItemView>
 #include <QCloseEvent>
@@ -50,6 +51,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QColor>
 #include <QtConcurrent/QtConcurrentRun>
 #include <memory>
 
@@ -64,6 +66,8 @@ namespace
 {
 constexpr int kDefaultVolume = 60;
 constexpr int kDefaultBlur = 70;
+constexpr int kDefaultBassThreshold = 55;
+constexpr bool kDefaultDebugBass = false;
 constexpr qreal kInteractiveActiveOpacity = 1.0;
 constexpr qreal kInteractiveIdleOpacity = 0.55;
 constexpr int kInteractiveFadeDelayMs = 2000;
@@ -503,6 +507,7 @@ void MainWindow::handlePlaybackStateChanged(bool playing)
 {
     updatePlayPauseButton(playing);
     updateTransportAvailability();
+    updateBassEffectState();
 }
 
 void MainWindow::handlePlaybackFinished()
@@ -519,6 +524,7 @@ void MainWindow::handlePlaybackFinished()
         updateNowPlaying(QString());
         updateTransportAvailability();
     }
+    updateBassEffectState();
 }
 
 void MainWindow::handleVolumeChanged(int value)
@@ -531,6 +537,12 @@ void MainWindow::handleBlurChanged(int value)
     if (m_videoWidget) {
         m_videoWidget->setBlurAmount(static_cast<float>(value) / 100.0f);
     }
+}
+
+void MainWindow::handleBassThresholdChanged(int value)
+{
+    Q_UNUSED(value)
+    updateBassEffectState();
 }
 
 void MainWindow::handleProgressSliderPressed()
@@ -773,6 +785,9 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 
 void MainWindow::setupUi()
 {
+    const QByteArray bassEnv = qgetenv("DRIFT_PLAYER_DEBUG_BASS");
+    m_debugBassVisualizer = (bassEnv == "1" || bassEnv == "true" || bassEnv == "on");
+
     m_videoWidget = new VideoBackgroundWidget(this);
 
     auto *overlay = new QWidget(this);
@@ -836,9 +851,11 @@ void MainWindow::setupUi()
     connect(m_playlist, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *, QListWidgetItem *) {
         refreshPlaylistStyles();
     });
-    connect(m_playlist->selectionModel(), &QItemSelectionModel::selectionChanged, this, [this](const QItemSelection &, const QItemSelection &) {
-        refreshPlaylistStyles();
-    });
+    if (auto *selection = m_playlist->selectionModel()) {
+        connect(selection, &QItemSelectionModel::selectionChanged, this, [this](const QItemSelection &, const QItemSelection &) {
+            refreshPlaylistStyles();
+        });
+    }
     m_playlistOpacity = new QGraphicsOpacityEffect(m_playlist);
     m_playlistOpacity->setOpacity(kInteractiveIdleOpacity);
     m_playlist->setGraphicsEffect(m_playlistOpacity);
@@ -1105,6 +1122,41 @@ void MainWindow::setupUi()
         }
     )");
 
+    m_bassSlider = new QSlider(Qt::Horizontal, m_controlsContainer);
+    m_bassSlider->setRange(0, 100);
+    m_bassSlider->setValue(kDefaultBassThreshold);
+    m_bassSlider->setToolTip(tr("Bass reaction threshold"));
+    m_bassSlider->setCursor(Qt::PointingHandCursor);
+    m_bassSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_bassSlider->setMinimumWidth(140);
+    m_bassSlider->setStyleSheet(R"(
+        QSlider {
+            height: 18px;
+        }
+        QSlider::groove:horizontal {
+            background: rgba(255, 255, 255, 24);
+            border-radius: 3px;
+            height: 4px;
+        }
+        QSlider::sub-page:horizontal {
+            background: rgba(220, 110, 255, 150);
+            border-radius: 3px;
+        }
+        QSlider::add-page:horizontal {
+            background: rgba(255, 255, 255, 18);
+            border-radius: 3px;
+        }
+        QSlider::handle:horizontal {
+            background: rgba(255, 255, 255, 230);
+            width: 16px;
+            margin: -6px 0;
+            border-radius: 8px;
+        }
+        QSlider::handle:horizontal:hover {
+            background: rgba(255, 255, 255, 255);
+        }
+    )");
+
     m_titleLabel = new QLabel(tr("Add tracks to begin"), m_controlsContainer);
     m_titleLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     m_titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -1146,6 +1198,9 @@ void MainWindow::setupUi()
     m_volumeLabel = new QLabel(tr("Volume"), m_controlsContainer);
     m_volumeLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
 
+    m_bassLabel = new QLabel(tr("Bass React"), m_controlsContainer);
+    m_bassLabel->setStyleSheet("color: rgba(255, 255, 255, 210);");
+
     m_slidersLayout = new QGridLayout;
     m_slidersLayout->setContentsMargins(0, 0, 0, 0);
     m_slidersLayout->setHorizontalSpacing(12);
@@ -1154,6 +1209,8 @@ void MainWindow::setupUi()
     m_slidersLayout->addWidget(m_blurSlider, 0, 1);
     m_slidersLayout->addWidget(m_volumeLabel, 1, 0, Qt::AlignRight | Qt::AlignVCenter);
     m_slidersLayout->addWidget(m_volumeSlider, 1, 1);
+    m_slidersLayout->addWidget(m_bassLabel, 2, 0, Qt::AlignRight | Qt::AlignVCenter);
+    m_slidersLayout->addWidget(m_bassSlider, 2, 1);
     m_slidersLayout->setColumnStretch(1, 1);
 
     buttonsLayout->addLayout(m_actionsLayout);
@@ -1162,7 +1219,26 @@ void MainWindow::setupUi()
     buttonsLayout->addLayout(m_slidersLayout, 1);
     controlsLayout->addLayout(buttonsLayout);
 
+    m_bassVisualizer = new BassVisualizerWidget(m_controlsContainer);
+    m_bassVisualizer->setMinimumHeight(72);
+    m_bassVisualizer->setActive(false);
+    m_bassVisualizer->setSensitivity(static_cast<double>(kDefaultBassThreshold) / 100.0);
+    m_bassVisualizer->setVisible(false);
+    controlsLayout->addWidget(m_bassVisualizer);
+
     updateControlsLayoutMode();
+
+    if (!m_debugBassVisualizer) {
+        if (m_bassLabel) {
+            m_bassLabel->hide();
+        }
+        if (m_bassSlider) {
+            m_bassSlider->hide();
+        }
+        if (m_bassVisualizer) {
+            m_bassVisualizer->hide();
+        }
+    }
 
     m_controlsOpacity = new QGraphicsOpacityEffect(m_controlsContainer);
     m_controlsOpacity->setOpacity(kInteractiveIdleOpacity);
@@ -1181,6 +1257,7 @@ void MainWindow::setupUi()
 
     registerInteractive(m_controlsContainer);
     registerInteractive(m_progressContainer);
+
 
     auto *overlayLayout = new QVBoxLayout(overlay);
     overlayLayout->setContentsMargins(32, 28, 32, 28);
@@ -1213,6 +1290,7 @@ void MainWindow::setupUi()
     connect(m_repeatButton, &QToolButton::clicked, this, &MainWindow::handleRepeatMode);
     connect(m_volumeSlider, &QSlider::valueChanged, this, &MainWindow::handleVolumeChanged);
     connect(m_blurSlider, &QSlider::valueChanged, this, &MainWindow::handleBlurChanged);
+    connect(m_bassSlider, &QSlider::valueChanged, this, &MainWindow::handleBassThresholdChanged);
     connect(m_progressSlider, &QSlider::sliderPressed, this, &MainWindow::handleProgressSliderPressed);
     connect(m_progressSlider, &QSlider::sliderReleased, this, &MainWindow::handleProgressSliderReleased);
     connect(m_progressSlider, &QSlider::sliderMoved, this, &MainWindow::handleProgressSliderMoved);
@@ -1228,6 +1306,8 @@ void MainWindow::setupUi()
                                           : tr("Blur handled by decoder"));
         }
     });
+
+    updateBassEffectState();
 
     m_playlistFadeTimer.start(kInteractiveFadeDelayMs);
     m_controlsFadeTimer.start(kInteractiveFadeDelayMs);
@@ -1256,8 +1336,15 @@ void MainWindow::loadSettings()
         m_videoWidget->setBlurAmount(static_cast<float>(blur) / 100.0f);
     }
 
+    const int bassThreshold = m_settings.value("visual/bassThreshold", kDefaultBassThreshold).toInt();
+    if (m_bassSlider) {
+        m_bassSlider->setValue(bassThreshold);
+    }
+    handleBassThresholdChanged(bassThreshold);
+
     restorePlaylistState();
     updateTransportAvailability();
+    updateBassEffectState();
 }
 
 void MainWindow::saveSettings()
@@ -1267,6 +1354,9 @@ void MainWindow::saveSettings()
     m_settings.setValue("playback/repeat", static_cast<int>(m_repeatMode));
     if (m_blurSlider) {
         m_settings.setValue("visual/blur", m_blurSlider->value());
+    }
+    if (m_bassSlider) {
+        m_settings.setValue("visual/bassThreshold", m_bassSlider->value());
     }
     savePlaylistState();
     m_settings.sync();
@@ -1368,6 +1458,7 @@ void MainWindow::playTrack(int index)
     m_playlist->setCurrentRow(index);
     updateNowPlaying(entry.filePath);
     updateTransportAvailability();
+    refreshPlaylistStyles();
 }
 
 int MainWindow::resolveNextIndex() const
@@ -1513,6 +1604,7 @@ void MainWindow::removeTrackAt(int index)
 
     savePlaylistState();
     updateTransportAvailability();
+    refreshPlaylistStyles();
 }
 
 void MainWindow::restorePlaylistState()
@@ -1553,6 +1645,7 @@ void MainWindow::restorePlaylistState()
     m_isRestoringPlaylist = false;
 
     savePlaylistState();
+    refreshPlaylistStyles();
 }
 
 void MainWindow::savePlaylistState()
@@ -1693,6 +1786,7 @@ void MainWindow::updatePlaylistRowState(int index, QListWidgetItem *item)
     }
 
     const bool isCurrent = (index == m_currentIndex && m_currentIndex != -1);
+    const bool isSelected = item->isSelected();
     QFont font = item->font();
     font.setBold(isCurrent);
     item->setFont(font);
@@ -1701,12 +1795,38 @@ void MainWindow::updatePlaylistRowState(int index, QListWidgetItem *item)
     const QColor playingText(255, 255, 255, 255);
     item->setForeground(isCurrent ? playingText : normalText);
 
-    if (!item->isSelected()) {
-        item->setBackground(isCurrent ? QColor(255, 255, 255, 40) : Qt::transparent);
+    if (isSelected) {
+        item->setBackground(isCurrent ? QColor(255, 255, 255, 80) : QColor(255, 255, 255, 56));
+    } else {
+        item->setBackground(isCurrent ? QColor(255, 255, 255, 38) : Qt::transparent);
+    }
+}
+
+void MainWindow::updateBassEffectState()
+{
+    const double threshold = m_bassSlider ? std::clamp(static_cast<double>(m_bassSlider->value()) / 100.0, 0.0, 1.0) : static_cast<double>(kDefaultBassThreshold) / 100.0;
+    const bool sliderActive = m_debugBassVisualizer && m_bassSlider && m_bassSlider->value() > 0;
+    const bool playing = m_videoWidget && m_videoWidget->hasMedia() && !m_videoWidget->isPaused();
+    const bool active = m_debugBassVisualizer && sliderActive && playing;
+
+    if (m_videoWidget) {
+        m_videoWidget->setBassThreshold(threshold);
+        m_videoWidget->setBassEnabled(active);
     }
 
-    spdlog::debug("Playlist row {} state updated: playing={} selected={}",
-                  index, isCurrent, item->isSelected());
+    if (m_bassVisualizer) {
+        m_bassVisualizer->setSensitivity(std::max(0.05, threshold));
+        m_bassVisualizer->setActive(active);
+        m_bassVisualizer->setVisible(m_debugBassVisualizer && !m_compactControls);
+    }
+
+    if (m_bassLabel) {
+        m_bassLabel->setVisible(m_debugBassVisualizer && !m_compactControls);
+    }
+
+    if (m_bassSlider) {
+        m_bassSlider->setVisible(m_debugBassVisualizer);
+    }
 }
 
 void MainWindow::updatePlaylistItem(int index)
@@ -1848,7 +1968,25 @@ void MainWindow::updateControlsLayoutMode(bool compact)
         m_volumeSlider->setMinimumWidth(compact ? 110 : 120);
     }
 
+    if (m_bassLabel) {
+        m_bassLabel->setText(compact ? tr("Bass") : tr("Bass React"));
+        m_bassLabel->setVisible(m_debugBassVisualizer && !compact);
+        if (m_slidersLayout) {
+            m_slidersLayout->setRowMinimumHeight(2, (m_debugBassVisualizer && !compact) ? -1 : 0);
+        }
+    }
+
+    if (m_bassSlider) {
+        m_bassSlider->setMinimumWidth(compact ? 110 : 140);
+        m_bassSlider->setVisible(m_debugBassVisualizer);
+    }
+
+    if (m_bassVisualizer) {
+        m_bassVisualizer->setVisible(m_debugBassVisualizer && !compact);
+    }
+
     updateRepeatButton();
+    refreshPlaylistStyles();
 }
 
 void MainWindow::setWidgetOpacity(QGraphicsOpacityEffect *effect, QPropertyAnimation *animation, qreal value, int durationMs)
@@ -2020,4 +2158,3 @@ void MainWindow::cleanupAddDialogProcess()
 
     m_addDialogOpen = false;
 }
-    QElapsedTimer timer;

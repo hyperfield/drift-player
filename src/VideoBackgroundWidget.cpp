@@ -18,6 +18,7 @@
 #include <QThread>
 #include <QMetaType>
 #include <QtDebug>
+#include <QRandomGenerator>
 
 #include <spdlog/spdlog.h>
 
@@ -183,12 +184,59 @@ VideoBackgroundWidget::VideoBackgroundWidget(QWidget *parent)
     m_positionTimer.setSingleShot(false);
     connect(&m_positionTimer, &QTimer::timeout, this, &VideoBackgroundWidget::pollPlaybackPosition);
 
+    m_bassTimer.setInterval(33);
+    m_bassTimer.setSingleShot(false);
+    connect(&m_bassTimer, &QTimer::timeout, this, [this]() {
+        if (!isVisible()) {
+            return;
+        }
+
+        m_bassPhase += 0.24;
+        if (m_bassPhase > 2.0 * M_PI) {
+            m_bassPhase -= 2.0 * M_PI;
+        }
+
+        const double base = (std::sin(m_bassPhase) + 1.0) * 0.5;
+        const double modulation = (std::sin(m_bassPhase * 0.5 + 1.7) + 1.0) * 0.5;
+        double amplitude = (0.65 * base + 0.35 * modulation);
+        amplitude = std::clamp(amplitude, 0.0, 1.0);
+        if (!m_bassEnabled) {
+            amplitude = 0.0;
+        }
+
+        if (amplitude > m_bassThreshold) {
+            const double intensity = (amplitude - m_bassThreshold);
+            m_bassFlash = std::min(1.0, m_bassFlash + intensity * 0.5 + 0.05);
+
+            m_bassStripes.clear();
+            const int stripes = 2 + static_cast<int>(intensity * 6.0);
+            for (int i = 0; i < stripes; ++i) {
+                const double topRatio = QRandomGenerator::global()->generateDouble();
+                const double heightRatio = std::clamp(intensity * (0.08 + QRandomGenerator::global()->generateDouble() * 0.17), 0.02, 0.4);
+                m_bassStripes.append(QRectF(0.0, topRatio, 1.0, heightRatio));
+            }
+        } else {
+            m_bassFlash *= 0.90;
+            if (m_bassFlash < 0.015) {
+                m_bassFlash = 0.0;
+                m_bassStripes.clear();
+                scheduleUpdate();
+            }
+        }
+
+        if (m_bassFlash > 0.01) {
+            scheduleUpdate();
+        }
+    });
+    m_bassTimer.start();
+
     initializeMpv();
 }
 
 VideoBackgroundWidget::~VideoBackgroundWidget()
 {
     m_positionTimer.stop();
+    m_bassTimer.stop();
     makeCurrent();
     releaseBlurResources();
     removeMpvShader();
@@ -290,6 +338,21 @@ void VideoBackgroundWidget::setBlurAmount(float amount)
 float VideoBackgroundWidget::blurAmount() const
 {
     return m_blurAmount;
+}
+
+void VideoBackgroundWidget::setBassThreshold(double threshold)
+{
+    m_bassThreshold = std::clamp(threshold, 0.0, 1.0);
+}
+
+void VideoBackgroundWidget::setBassEnabled(bool enabled)
+{
+    m_bassEnabled = enabled;
+    if (!m_bassEnabled) {
+        m_bassFlash = 0.0;
+        m_bassStripes.clear();
+        scheduleUpdate();
+    }
 }
 
 bool VideoBackgroundWidget::hasMedia() const
@@ -411,6 +474,28 @@ void VideoBackgroundWidget::paintGL()
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), QColor(0, 0, 0, 110));
+
+    if (m_bassFlash > 0.01) {
+        const double intensity = std::clamp(m_bassFlash, 0.0, 1.0);
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setOpacity(intensity * 0.45);
+        painter.fillRect(rect(), QColor(140, 80, 255, 120));
+        painter.setOpacity(intensity * 0.35);
+        painter.setPen(Qt::NoPen);
+        painter.setCompositionMode(QPainter::CompositionMode_Screen);
+        const double totalHeight = static_cast<double>(height());
+        const double totalWidth = static_cast<double>(width());
+        for (const QRectF &stripe : m_bassStripes) {
+            double top = stripe.y() * totalHeight;
+            double h = stripe.height() * totalHeight;
+            top = std::clamp(top, 0.0, totalHeight);
+            h = std::max(4.0, std::min(h, totalHeight - top));
+            QRectF drawRect(0.0, top, totalWidth, h);
+            painter.fillRect(drawRect, QColor(255, 255, 255, 140));
+        }
+        painter.restore();
+    }
 }
 
 void VideoBackgroundWidget::resizeGL(int w, int h)

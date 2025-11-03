@@ -2,8 +2,10 @@ qt_add_executable(drift_player
     main.cpp
     MainWindow.cpp
     VideoBackgroundWidget.cpp
+    BassVisualizerWidget.cpp
     ../include/MainWindow.h
     ../include/VideoBackgroundWidget.h
+    ../include/BassVisualizerWidget.h
 )
 
 target_include_directories(drift_player

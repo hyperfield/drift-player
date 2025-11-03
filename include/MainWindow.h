@@ -23,6 +23,9 @@ class QHBoxLayout;
 class QGridLayout;
 class QResizeEvent;
 class QFileSystemWatcher;
+class QSlider;
+class QLabel;
+class BassVisualizerWidget;
 
 struct TrackEntry
 {
@@ -69,6 +72,7 @@ private slots:
     void handlePlaybackFinished();
     void handleVolumeChanged(int value);
     void handleBlurChanged(int value);
+    void handleBassThresholdChanged(int value);
     void handleProgressSliderPressed();
     void handleProgressSliderReleased();
     void handleProgressSliderMoved(int value);
@@ -115,6 +119,7 @@ private:
     void logTracks(const char *tag) const;
     void requestRemoveTrack(int index);
     void updatePlaylistRowState(int index, QListWidgetItem *item);
+    void updateBassEffectState();
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -128,9 +133,11 @@ private:
     QToolButton *m_repeatButton = nullptr;
     QSlider *m_volumeSlider = nullptr;
     QSlider *m_blurSlider = nullptr;
+    QSlider *m_bassSlider = nullptr;
     QLabel *m_titleLabel = nullptr;
     QLabel *m_blurLabel = nullptr;
     QLabel *m_volumeLabel = nullptr;
+    QLabel *m_bassLabel = nullptr;
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
     QWidget *m_controlsContainer = nullptr;
@@ -141,6 +148,8 @@ private:
     QFutureWatcher<double> *m_durationFutureWatcher = nullptr;
     QQueue<QString> m_durationProbeQueue;
     QString m_durationProbeCurrent;
+    BassVisualizerWidget *m_bassVisualizer = nullptr;
+    bool m_debugBassVisualizer = false;
 
     QVector<TrackEntry> m_tracks;
     int m_currentIndex = -1;
