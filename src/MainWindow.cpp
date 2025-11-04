@@ -46,7 +46,6 @@
 #include <QAction>
 #include <QMessageBox>
 #include <QGridLayout>
-#include <QVariant>
 #include <QGraphicsDropShadowEffect>
 #include <QTextStream>
 #include <QTimer>
@@ -60,7 +59,6 @@
 #include <QUrl>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
 #include <QVariant>
 #include <QVariantList>
 #include <QtConcurrent/QtConcurrentRun>
@@ -801,7 +799,9 @@ void MainWindow::handleOpenUrl()
 
     refreshPlaylistStyles();
     updateTransportAvailability();
-    addUrlToHistory(trimmed);
+    if (isRemoteLocation(trimmed)) {
+        addUrlToHistory(trimmed);
+    }
 }
 
 void MainWindow::handleLoadPlaylist()
@@ -871,9 +871,27 @@ void MainWindow::handleToggleFullscreen(bool checked)
 
 void MainWindow::handleShowAboutDrift()
 {
-    QMessageBox::about(this,
-                       tr("About Drift Player"),
-                       tr("Drift Player\nA cross-platform media player built with Qt and mpv."));
+    QMessageBox aboutBox(this);
+    aboutBox.setWindowTitle(tr("About Drift Player"));
+    aboutBox.setTextFormat(Qt::RichText);
+    QString version = QCoreApplication::applicationVersion();
+    if (version.isEmpty()) {
+        version = tr("Unknown version");
+    } else {
+        version = tr("Version %1").arg(version);
+    }
+
+    const QString body = tr("<b>Drift Player</b><br/>%1<br/><br/>"
+                            "Ambient media player built with Qt and mpv.")
+                              .arg(version);
+    aboutBox.setText(body);
+    if (!m_appIcon.isNull()) {
+        aboutBox.setIconPixmap(m_appIcon.pixmap(64, 64));
+    } else {
+        aboutBox.setIcon(QMessageBox::Information);
+    }
+    aboutBox.setStandardButtons(QMessageBox::Ok);
+    aboutBox.exec();
 }
 
 void MainWindow::handleShowAboutQt()
@@ -933,6 +951,14 @@ void MainWindow::handleMetadataChanged(const QVariantMap &metadata)
     }
 
     if (!candidate.isEmpty()) {
+        if (!entry.isRemote) {
+            const QString defaultDisplay = displayNameForFile(entry.filePath);
+            const QString rawFilename = QFileInfo(entry.filePath).fileName();
+            if (candidate.compare(defaultDisplay, Qt::CaseInsensitive) == 0
+                || candidate.compare(rawFilename, Qt::CaseInsensitive) == 0) {
+                return;
+            }
+        }
         updateTrackTitle(m_currentIndex, candidate);
     }
 }
@@ -942,7 +968,23 @@ void MainWindow::handleMediaTitleChanged(const QString &title)
     if (title.trimmed().isEmpty()) {
         return;
     }
-    updateTrackTitle(m_currentIndex, title);
+    if (m_currentIndex < 0 || m_currentIndex >= m_tracks.size()) {
+        return;
+    }
+
+    const QString trimmed = title.trimmed();
+    TrackEntry &entry = m_tracks[m_currentIndex];
+
+    if (!entry.isRemote) {
+        const QString defaultDisplay = displayNameForFile(entry.filePath);
+        const QString rawFilename = QFileInfo(entry.filePath).fileName();
+        if (trimmed.compare(defaultDisplay, Qt::CaseInsensitive) == 0
+            || trimmed.compare(rawFilename, Qt::CaseInsensitive) == 0) {
+            return; // mpv reported the plain filename; keep our nicer title.
+        }
+    }
+
+    updateTrackTitle(m_currentIndex, trimmed);
 }
 
 void MainWindow::handlePlaylistActivated(QListWidgetItem *item)
@@ -1353,6 +1395,10 @@ void MainWindow::setupUi()
     m_debugBassVisualizer = (bassEnv == "1" || bassEnv == "true" || bassEnv == "on");
 
     m_videoWidget = new VideoBackgroundWidget(this);
+    m_appIcon = QIcon(QStringLiteral(":/icons/driftplayer_256.png"));
+    if (!m_appIcon.isNull()) {
+        setWindowIcon(m_appIcon);
+    }
 
     QMenuBar *mainMenuBar = new QMenuBar(this);
     setMenuBar(mainMenuBar);
@@ -2188,7 +2234,7 @@ void MainWindow::playTrack(int index)
     }
 
     if (entry.isRemote) {
-        startMetadataFetch(index);
+        startMetadataFetch(index, true);
     }
 
     m_videoWidget->setAutoStartOnLoad(restoringTrack ? m_restoreShouldPlay : true);
@@ -2699,6 +2745,10 @@ void MainWindow::enqueueDurationProbe(const QString &normalizedPath)
         return;
     }
 
+    if (trackIt->isRemote) {
+        return;
+    }
+
     if (trackIt->durationSeconds > 0.5) {
         return;
     }
@@ -2962,7 +3012,7 @@ void MainWindow::addUrlToHistory(const QString &url)
     m_settings.setValue("playback/urlHistory", m_recentUrls);
 }
 
-void MainWindow::startMetadataFetch(int index)
+void MainWindow::startMetadataFetch(int index, bool showErrors)
 {
     if (index < 0 || index >= m_tracks.size()) {
         return;
@@ -2988,7 +3038,7 @@ void MainWindow::startMetadataFetch(int index)
     m_metadataPending.insert(entry.normalizedPath);
 
     auto *watcher = new QFutureWatcher<MetadataResult>(this);
-    connect(watcher, &QFutureWatcher<MetadataResult>::finished, this, [this, watcher, path = entry.normalizedPath]() {
+    connect(watcher, &QFutureWatcher<MetadataResult>::finished, this, [this, watcher, path = entry.normalizedPath, showErrors]() {
         const MetadataResult result = watcher->result();
         watcher->deleteLater();
         m_metadataPending.remove(path);
@@ -2999,6 +3049,12 @@ void MainWindow::startMetadataFetch(int index)
         }
 
         if (!result.success) {
+            if (result.networkError && showErrors && m_videoWidget && m_videoWidget->hasMedia()) {
+                QMessageBox::warning(this,
+                                     tr("Network Error"),
+                                     tr("Unable to retrieve metadata for the stream.\n"
+                                        "Please check your network connection."));
+            }
             if (!result.errorMessage.isEmpty()) {
                 spdlog::debug("Metadata fetch failed for '{}': {}", path.toStdString(), result.errorMessage.toStdString());
             }

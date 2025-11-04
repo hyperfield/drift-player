@@ -1,4 +1,5 @@
 qt_add_executable(drift_player
+    MACOSX_BUNDLE
     main.cpp
     MainWindow.cpp
     VideoBackgroundWidget.cpp
@@ -7,6 +8,12 @@ qt_add_executable(drift_player
     ../include/VideoBackgroundWidget.h
     ../include/BassVisualizerWidget.h
 )
+
+qt_add_resources(drift_player_resources
+    ../resources/icons.qrc
+)
+
+target_sources(drift_player PRIVATE ${drift_player_resources})
 
 target_include_directories(drift_player
     PRIVATE
@@ -35,6 +42,16 @@ set_target_properties(drift_player PROPERTIES
 
 if (WIN32)
     set_property(TARGET drift_player APPEND PROPERTY WIN32_EXECUTABLE TRUE)
+    set(APP_ICON_PATH "${CMAKE_SOURCE_DIR}/assets/icons/driftplayer.ico")
+    configure_file(${CMAKE_SOURCE_DIR}/resources/appicon.rc.in
+                   ${CMAKE_BINARY_DIR}/appicon.rc @ONLY)
+    target_sources(drift_player PRIVATE ${CMAKE_BINARY_DIR}/appicon.rc)
+endif()
+
+if (APPLE)
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/assets/icons/driftplayer.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(drift_player PRIVATE ${CMAKE_SOURCE_DIR}/assets/icons/driftplayer.icns)
+    set_target_properties(drift_player PROPERTIES MACOSX_BUNDLE_ICON_FILE driftplayer.icns)
 endif()
 
 qt_add_executable(drift_dialog_helper

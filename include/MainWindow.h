@@ -11,6 +11,7 @@
 #include <QQueue>
 #include <QFutureWatcher>
 #include <QVariantMap>
+#include <QIcon>
 
 class QListWidget;
 class QPushButton;
@@ -151,7 +152,7 @@ private:
     void refreshNowPlayingLabel();
     void updateTrackTitle(int index, const QString &title);
     void addUrlToHistory(const QString &url);
-    void startMetadataFetch(int index);
+    void startMetadataFetch(int index, bool showErrors = false);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -176,6 +177,7 @@ protected:
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
     QLabel *m_nextLabel = nullptr;
+    QIcon m_appIcon;
     QAction *m_loadPlaylistAction = nullptr;
     QAction *m_savePlaylistAction = nullptr;
     QAction *m_openUrlAction = nullptr;
