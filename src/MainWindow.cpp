@@ -55,6 +55,9 @@
 #include <QWidget>
 #include <QColor>
 #include <QKeySequence>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QUrl>
 #include <QtConcurrent/QtConcurrentRun>
 #include <memory>
 #include <string>
@@ -79,6 +82,30 @@ constexpr int kCompactControlsThresholdPx = 960;
 
 QString displayNameForFile(const QString &filePath)
 {
+    const QUrl url = QUrl::fromUserInput(filePath);
+    if (url.isValid() && !url.isRelative() && !url.isLocalFile() && !url.scheme().isEmpty()) {
+        QString base = url.fileName();
+        if (base.isEmpty()) {
+            base = url.path();
+            if (base.endsWith('/')) {
+                base.chop(1);
+            }
+            const int lastSlash = base.lastIndexOf('/');
+            if (lastSlash != -1) {
+                base = base.mid(lastSlash + 1);
+            }
+        }
+        if (base.isEmpty()) {
+            base = url.host();
+        }
+        if (base.isEmpty()) {
+            base = url.toString(QUrl::RemoveUserInfo);
+        }
+        base.replace(QChar('_'), QChar(' '));
+        base.replace(QChar('-'), QChar(' '));
+        return base.simplified();
+    }
+
     QFileInfo info(filePath);
     QString base = info.completeBaseName();
     if (base.isEmpty()) {
@@ -87,6 +114,12 @@ QString displayNameForFile(const QString &filePath)
     base.replace(QChar('_'), QChar(' '));
     base.replace(QChar('-'), QChar(' '));
     return base.simplified();
+}
+
+bool isRemoteLocation(const QString &path)
+{
+    const QUrl url = QUrl::fromUserInput(path);
+    return url.isValid() && !url.isRelative() && !url.isLocalFile() && !url.scheme().isEmpty();
 }
 
 QString formatTime(double seconds)
@@ -509,6 +542,65 @@ void MainWindow::handlePlayPrevious()
     if (prevIndex != -1) {
         playTrack(prevIndex);
     }
+}
+
+void MainWindow::handleOpenUrl()
+{
+    bool ok = false;
+    const QString input = QInputDialog::getText(this,
+                                                tr("Open URL"),
+                                                tr("Enter the media URL:"),
+                                                QLineEdit::Normal,
+                                                QString(),
+                                                &ok);
+    if (!ok) {
+        return;
+    }
+
+    const QString trimmed = input.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+
+    QUrl url = QUrl::fromUserInput(trimmed);
+    if (!url.isValid() || url.isRelative() || url.scheme().isEmpty()) {
+        QMessageBox::warning(this,
+                             tr("Invalid URL"),
+                             tr("The provided address could not be understood as a media URL."));
+        return;
+    }
+
+    QString targetSource;
+    if (url.isLocalFile()) {
+        targetSource = url.toLocalFile();
+    } else {
+        targetSource = url.toString(QUrl::FullyEncoded);
+    }
+
+    if (!addTrack(targetSource)) {
+        QMessageBox::information(this,
+                                 tr("Already Added"),
+                                 tr("That source is already present in the playlist."));
+        return;
+    }
+
+    const int newIndex = m_tracks.size() - 1;
+    if (newIndex >= 0 && m_playlist) {
+        if (QListWidgetItem *item = m_playlist->item(newIndex)) {
+            m_playlist->scrollToItem(item, QAbstractItemView::PositionAtBottom);
+        }
+    }
+
+    if (m_currentIndex == -1 && !m_tracks.isEmpty()) {
+        m_currentIndex = 0;
+        if (m_playlist) {
+            m_playlist->setCurrentRow(0);
+        }
+        updateNowPlaying(m_tracks.at(0).filePath);
+    }
+
+    refreshPlaylistStyles();
+    updateTransportAvailability();
 }
 
 void MainWindow::handleLoadPlaylist()
@@ -992,6 +1084,10 @@ void MainWindow::setupUi()
     m_savePlaylistAction = fileMenu->addAction(tr("Save Playlist..."));
     m_savePlaylistAction->setShortcut(QKeySequence::Save);
     connect(m_savePlaylistAction, &QAction::triggered, this, &MainWindow::handleSavePlaylist);
+
+    m_openUrlAction = fileMenu->addAction(tr("Open URL..."));
+    m_openUrlAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
+    connect(m_openUrlAction, &QAction::triggered, this, &MainWindow::handleOpenUrl);
 
     m_addMediaAction = fileMenu->addAction(tr("Add Media"));
     m_addMediaAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
@@ -1681,10 +1777,14 @@ bool MainWindow::addTrack(const QString &filePath)
         return false;
     }
 
-    QFileInfo info(normalized);
-    if (!info.exists()) {
-        spdlog::warn("Skipping '{}' because file is missing", normalized);
-        return false;
+    const bool remote = isRemoteLocation(filePath);
+
+    if (!remote) {
+        QFileInfo info(normalized);
+        if (!info.exists()) {
+            spdlog::warn("Skipping '{}' because file is missing", normalized);
+            return false;
+        }
     }
 
     TrackEntry entry{displayNameForFile(filePath), filePath, normalized};
@@ -1699,7 +1799,9 @@ bool MainWindow::addTrack(const QString &filePath)
 
     updatePlaylistItem(index);
 
-    startWatchingTrack(normalized);
+    if (!remote) {
+        startWatchingTrack(normalized);
+    }
 
     if (!m_isRestoringPlaylist) {
         savePlaylistState();
@@ -1977,7 +2079,8 @@ void MainWindow::restorePlaylistState()
             continue;
         }
 
-        if (!QFileInfo::exists(path)) {
+        const bool remote = isRemoteLocation(path);
+        if (!remote && !QFileInfo::exists(path)) {
             spdlog::info("Skipping missing playlist entry '{}' during restore", path);
             continue;
         }
@@ -1988,10 +2091,10 @@ void MainWindow::restorePlaylistState()
                 if (storedDuration > 0.5 && !m_tracks.isEmpty()) {
                     m_tracks.last().durationSeconds = storedDuration;
                     updatePlaylistItem(m_tracks.size() - 1);
-                } else {
+                } else if (!remote) {
                     enqueueDurationProbe(path);
                 }
-            } else {
+            } else if (!remote) {
                 enqueueDurationProbe(path);
             }
         }
@@ -2154,6 +2257,9 @@ void MainWindow::updateMenuAvailability()
     if (m_addMediaAction) {
         const bool enabled = !m_addDialogOpen;
         m_addMediaAction->setEnabled(enabled);
+    }
+    if (m_openUrlAction) {
+        m_openUrlAction->setEnabled(true);
     }
     if (m_quitAction) {
         m_quitAction->setEnabled(true);
@@ -2717,6 +2823,11 @@ bool MainWindow::isCursorInside(QWidget *widget) const
 
 QString MainWindow::normalizedPathFor(const QString &filePath) const
 {
+    const QUrl url = QUrl::fromUserInput(filePath);
+    if (url.isValid() && !url.isRelative() && !url.isLocalFile() && !url.scheme().isEmpty()) {
+        return url.toString(QUrl::FullyEncoded);
+    }
+
     QFileInfo info(filePath);
     const QString absolute = info.absoluteFilePath();
     return QDir::cleanPath(absolute);

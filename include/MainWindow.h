@@ -27,6 +27,7 @@ class QFileSystemWatcher;
 class QSlider;
 class QLabel;
 class BassVisualizerWidget;
+class QEvent;
 
 struct TrackEntry
 {
@@ -66,6 +67,7 @@ private slots:
     void handlePlayPause();
     void handlePlayNext();
     void handlePlayPrevious();
+    void handleOpenUrl();
     void handleLoadPlaylist();
     void handleSavePlaylist();
     void handleUndo();
@@ -164,6 +166,7 @@ protected:
     QLabel *m_nextLabel = nullptr;
     QAction *m_loadPlaylistAction = nullptr;
     QAction *m_savePlaylistAction = nullptr;
+    QAction *m_openUrlAction = nullptr;
     QAction *m_addMediaAction = nullptr;
     QAction *m_quitAction = nullptr;
     QAction *m_aboutDriftAction = nullptr;
