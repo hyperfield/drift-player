@@ -15,6 +15,7 @@ class QPushButton;
 class QSlider;
 class QLabel;
 class QToolButton;
+class QAction;
 class QListWidgetItem;
 class QGraphicsOpacityEffect;
 class QPropertyAnimation;
@@ -65,6 +66,15 @@ private slots:
     void handlePlayPause();
     void handlePlayNext();
     void handlePlayPrevious();
+    void handleLoadPlaylist();
+    void handleSavePlaylist();
+    void handleUndo();
+    void handleRedo();
+    void handleRemoveSelectedTrack();
+    void handleToggleCompactControls(bool checked);
+    void handleToggleFullscreen(bool checked);
+    void handleShowAboutDrift();
+    void handleShowAboutQt();
     void handlePlaylistActivated(QListWidgetItem *item);
     void handleShuffleToggled();
     void handleRepeatMode();
@@ -127,6 +137,10 @@ private:
     [[nodiscard]] int indexForNormalizedPath(const QString &normalizedPath) const;
     void clearPendingRestore();
     void applyRestoredProgressToUi(double position, double durationSeconds);
+    void updateMenuAvailability();
+
+protected:
+    void changeEvent(QEvent *event) override;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -148,6 +162,20 @@ private:
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
     QLabel *m_nextLabel = nullptr;
+    QAction *m_loadPlaylistAction = nullptr;
+    QAction *m_savePlaylistAction = nullptr;
+    QAction *m_addMediaAction = nullptr;
+    QAction *m_quitAction = nullptr;
+    QAction *m_aboutDriftAction = nullptr;
+    QAction *m_aboutQtAction = nullptr;
+    QAction *m_undoAction = nullptr;
+    QAction *m_redoAction = nullptr;
+    QAction *m_removeTrackAction = nullptr;
+    QAction *m_viewCompactAction = nullptr;
+    QAction *m_viewFullscreenAction = nullptr;
+    QAction *m_playAction = nullptr;
+    QAction *m_playNextAction = nullptr;
+    QAction *m_playPreviousAction = nullptr;
     QWidget *m_controlsContainer = nullptr;
     QWidget *m_progressContainer = nullptr;
     QHBoxLayout *m_actionsLayout = nullptr;
@@ -180,6 +208,8 @@ private:
     QProcess *m_addDialogProcess = nullptr;
     QString m_addDialogTempFile;
     bool m_compactControls = false;
+    bool m_compactOverrideEnabled = false;
+    bool m_compactOverrideValue = false;
     bool m_isRestoringPlaylist = false;
     QSet<QString> m_watchedPaths;
     int m_contextMenuIndex = -1;

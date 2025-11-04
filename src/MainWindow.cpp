@@ -42,6 +42,8 @@
 #include <QStandardPaths>
 #include <QStyle>
 #include <QMenu>
+#include <QMenuBar>
+#include <QAction>
 #include <QMessageBox>
 #include <QGridLayout>
 #include <QVariant>
@@ -52,6 +54,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QColor>
+#include <QKeySequence>
 #include <QtConcurrent/QtConcurrentRun>
 #include <memory>
 #include <string>
@@ -329,7 +332,26 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
-    updateControlsLayoutMode(event->size().width() < kCompactControlsThresholdPx);
+    if (m_compactOverrideEnabled) {
+        updateControlsLayoutMode(m_compactOverrideValue);
+    } else {
+        updateControlsLayoutMode(event->size().width() < kCompactControlsThresholdPx);
+    }
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
+    if (!event) {
+        return;
+    }
+    if (event->type() == QEvent::WindowStateChange) {
+        if (m_viewFullscreenAction) {
+            const QSignalBlocker blocker(m_viewFullscreenAction);
+            m_viewFullscreenAction->setChecked(isFullScreen());
+        }
+        updateMenuAvailability();
+    }
 }
 
 void MainWindow::handleAddMedia()
@@ -339,9 +361,14 @@ void MainWindow::handleAddMedia()
         return;
     }
 
+    m_addDialogOpen = true;
+    updateMenuAvailability();
+
     const QString helperPath = resolveDialogHelperPath();
     if (helperPath.isEmpty()) {
         spdlog::error("Add Media helper executable not found");
+        m_addDialogOpen = false;
+        updateMenuAvailability();
         return;
     }
 
@@ -354,6 +381,8 @@ void MainWindow::handleAddMedia()
     QDir dir(tempDir);
     if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
         spdlog::error("Unable to create temporary directory {}", tempDir.toStdString());
+        m_addDialogOpen = false;
+        updateMenuAvailability();
         return;
     }
 
@@ -387,6 +416,7 @@ void MainWindow::handleAddDialogClosed(int result)
 {
     spdlog::info("Add Media dialog closed result={}", result);
     m_addDialogOpen = false;
+    updateMenuAvailability();
 }
 
 void MainWindow::handleAddDialogHelperFinished(int exitCode, QProcess::ExitStatus status)
@@ -479,6 +509,83 @@ void MainWindow::handlePlayPrevious()
     if (prevIndex != -1) {
         playTrack(prevIndex);
     }
+}
+
+void MainWindow::handleLoadPlaylist()
+{
+    QMessageBox::information(this,
+                             tr("Load Playlist"),
+                             tr("Playlist loading is not implemented yet."));
+}
+
+void MainWindow::handleSavePlaylist()
+{
+    QMessageBox::information(this,
+                             tr("Save Playlist"),
+                             tr("Playlist saving is not implemented yet."));
+}
+
+void MainWindow::handleUndo()
+{
+    QMessageBox::information(this,
+                             tr("Undo"),
+                             tr("Undo support is not available yet."));
+}
+
+void MainWindow::handleRedo()
+{
+    QMessageBox::information(this,
+                             tr("Redo"),
+                             tr("Redo support is not available yet."));
+}
+
+void MainWindow::handleRemoveSelectedTrack()
+{
+    if (!m_playlist) {
+        return;
+    }
+
+    const int row = m_playlist->currentRow();
+    if (row < 0 || row >= m_tracks.size()) {
+        return;
+    }
+
+    requestRemoveTrack(row);
+}
+
+void MainWindow::handleToggleCompactControls(bool checked)
+{
+    if (checked) {
+        m_compactOverrideEnabled = true;
+        m_compactOverrideValue = true;
+        updateControlsLayoutMode(true);
+    } else {
+        m_compactOverrideEnabled = false;
+        updateControlsLayoutMode();
+    }
+    updateMenuAvailability();
+}
+
+void MainWindow::handleToggleFullscreen(bool checked)
+{
+    if (checked && !isFullScreen()) {
+        showFullScreen();
+    } else if (!checked && isFullScreen()) {
+        showNormal();
+    }
+    updateMenuAvailability();
+}
+
+void MainWindow::handleShowAboutDrift()
+{
+    QMessageBox::about(this,
+                       tr("About Drift Player"),
+                       tr("Drift Player\nA cross-platform media player built with Qt and mpv."));
+}
+
+void MainWindow::handleShowAboutQt()
+{
+    QMessageBox::aboutQt(this);
 }
 
 void MainWindow::handlePlaylistActivated(QListWidgetItem *item)
@@ -874,6 +981,71 @@ void MainWindow::setupUi()
 
     m_videoWidget = new VideoBackgroundWidget(this);
 
+    QMenuBar *mainMenuBar = new QMenuBar(this);
+    setMenuBar(mainMenuBar);
+
+    QMenu *fileMenu = mainMenuBar->addMenu(tr("&File"));
+    m_loadPlaylistAction = fileMenu->addAction(tr("Load Playlist..."));
+    m_loadPlaylistAction->setShortcut(QKeySequence::Open);
+    connect(m_loadPlaylistAction, &QAction::triggered, this, &MainWindow::handleLoadPlaylist);
+
+    m_savePlaylistAction = fileMenu->addAction(tr("Save Playlist..."));
+    m_savePlaylistAction->setShortcut(QKeySequence::Save);
+    connect(m_savePlaylistAction, &QAction::triggered, this, &MainWindow::handleSavePlaylist);
+
+    m_addMediaAction = fileMenu->addAction(tr("Add Media"));
+    m_addMediaAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
+    connect(m_addMediaAction, &QAction::triggered, this, &MainWindow::handleAddMedia);
+
+    fileMenu->addSeparator();
+    m_quitAction = fileMenu->addAction(tr("Quit"));
+    m_quitAction->setShortcut(QKeySequence::Quit);
+    connect(m_quitAction, &QAction::triggered, qApp, &QApplication::quit);
+
+    QMenu *editMenu = mainMenuBar->addMenu(tr("&Edit"));
+    m_undoAction = editMenu->addAction(tr("Undo"));
+    m_undoAction->setShortcut(QKeySequence::Undo);
+    connect(m_undoAction, &QAction::triggered, this, &MainWindow::handleUndo);
+
+    m_redoAction = editMenu->addAction(tr("Redo"));
+    m_redoAction->setShortcut(QKeySequence::Redo);
+    connect(m_redoAction, &QAction::triggered, this, &MainWindow::handleRedo);
+
+    editMenu->addSeparator();
+    m_removeTrackAction = editMenu->addAction(tr("Remove Selected Track"));
+    m_removeTrackAction->setShortcut(QKeySequence::Delete);
+    connect(m_removeTrackAction, &QAction::triggered, this, &MainWindow::handleRemoveSelectedTrack);
+
+    QMenu *viewMenu = mainMenuBar->addMenu(tr("&View"));
+    m_viewCompactAction = viewMenu->addAction(tr("Compact Controls"));
+    m_viewCompactAction->setCheckable(true);
+    connect(m_viewCompactAction, &QAction::toggled, this, &MainWindow::handleToggleCompactControls);
+
+    m_viewFullscreenAction = viewMenu->addAction(tr("Fullscreen"));
+    m_viewFullscreenAction->setCheckable(true);
+    m_viewFullscreenAction->setShortcut(Qt::Key_F11);
+    connect(m_viewFullscreenAction, &QAction::toggled, this, &MainWindow::handleToggleFullscreen);
+
+    QMenu *playbackMenu = mainMenuBar->addMenu(tr("&Playback"));
+    m_playAction = playbackMenu->addAction(tr("Play / Pause"));
+    m_playAction->setShortcut(Qt::Key_Space);
+    connect(m_playAction, &QAction::triggered, this, &MainWindow::handlePlayPause);
+
+    m_playPreviousAction = playbackMenu->addAction(tr("Previous"));
+    m_playPreviousAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Left));
+    connect(m_playPreviousAction, &QAction::triggered, this, &MainWindow::handlePlayPrevious);
+
+    m_playNextAction = playbackMenu->addAction(tr("Next"));
+    m_playNextAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Right));
+    connect(m_playNextAction, &QAction::triggered, this, &MainWindow::handlePlayNext);
+
+    QMenu *helpMenu = mainMenuBar->addMenu(tr("&Help"));
+    m_aboutDriftAction = helpMenu->addAction(tr("About Drift Player"));
+    connect(m_aboutDriftAction, &QAction::triggered, this, &MainWindow::handleShowAboutDrift);
+
+    m_aboutQtAction = helpMenu->addAction(tr("About Qt"));
+    connect(m_aboutQtAction, &QAction::triggered, this, &MainWindow::handleShowAboutQt);
+
     auto *overlay = new QWidget(this);
     overlay->setAttribute(Qt::WA_TranslucentBackground);
     overlay->setAutoFillBackground(false);
@@ -934,10 +1106,12 @@ void MainWindow::setupUi()
     connect(m_playlist, &QListWidget::customContextMenuRequested, this, &MainWindow::handlePlaylistContextMenu);
     connect(m_playlist, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *, QListWidgetItem *) {
         refreshPlaylistStyles();
+        updateMenuAvailability();
     });
     if (auto *selection = m_playlist->selectionModel()) {
         connect(selection, &QItemSelectionModel::selectionChanged, this, [this](const QItemSelection &, const QItemSelection &) {
             refreshPlaylistStyles();
+            updateMenuAvailability();
         });
     }
     m_playlistOpacity = new QGraphicsOpacityEffect(m_playlist);
@@ -1378,6 +1552,7 @@ void MainWindow::setupUi()
     stackedLayout->setCurrentWidget(overlay);
     overlay->raise();
 
+    updateMenuAvailability();
     updateNowPlaying(QString());
     updateTransportAvailability();
 
@@ -1963,6 +2138,62 @@ void MainWindow::applyRestoredProgressToUi(double position, double durationSecon
     }
 }
 
+void MainWindow::updateMenuAvailability()
+{
+    const bool hasTracks = !m_tracks.isEmpty();
+    const bool hasMedia = m_videoWidget && m_videoWidget->hasMedia();
+    const bool canNavigate = hasTracks && m_tracks.size() > 1;
+    const bool hasSelection = m_playlist && (m_playlist->currentRow() >= 0);
+
+    if (m_loadPlaylistAction) {
+        m_loadPlaylistAction->setEnabled(true);
+    }
+    if (m_savePlaylistAction) {
+        m_savePlaylistAction->setEnabled(hasTracks);
+    }
+    if (m_addMediaAction) {
+        const bool enabled = !m_addDialogOpen;
+        m_addMediaAction->setEnabled(enabled);
+    }
+    if (m_quitAction) {
+        m_quitAction->setEnabled(true);
+    }
+    if (m_aboutDriftAction) {
+        m_aboutDriftAction->setEnabled(true);
+    }
+    if (m_aboutQtAction) {
+        m_aboutQtAction->setEnabled(true);
+    }
+    if (m_undoAction) {
+        m_undoAction->setEnabled(false);
+    }
+    if (m_redoAction) {
+        m_redoAction->setEnabled(false);
+    }
+    if (m_removeTrackAction) {
+        m_removeTrackAction->setEnabled(hasSelection);
+    }
+    if (m_viewCompactAction) {
+        const QSignalBlocker blocker(m_viewCompactAction);
+        m_viewCompactAction->setChecked(m_compactOverrideEnabled && m_compactOverrideValue);
+        m_viewCompactAction->setEnabled(true);
+    }
+    if (m_viewFullscreenAction) {
+        const QSignalBlocker blocker(m_viewFullscreenAction);
+        m_viewFullscreenAction->setChecked(isFullScreen());
+        m_viewFullscreenAction->setEnabled(true);
+    }
+    if (m_playAction) {
+        m_playAction->setEnabled(hasTracks || hasMedia);
+    }
+    if (m_playNextAction) {
+        m_playNextAction->setEnabled(canNavigate);
+    }
+    if (m_playPreviousAction) {
+        m_playPreviousAction->setEnabled(canNavigate);
+    }
+}
+
 void MainWindow::savePlaylistState()
 {
     QStringList paths;
@@ -2171,7 +2402,12 @@ void MainWindow::updatePlaylistItem(int index)
 
 void MainWindow::updatePlayPauseButton(bool playing)
 {
-    m_playPauseButton->setIcon(style()->standardIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+    if (m_playPauseButton) {
+        m_playPauseButton->setIcon(style()->standardIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+    }
+    if (m_playAction) {
+        m_playAction->setText(playing ? tr("Pause") : tr("Play"));
+    }
 }
 
 void MainWindow::updateRepeatButton()
@@ -2227,11 +2463,17 @@ void MainWindow::updateTransportAvailability()
     if (!hasMedia) {
         updatePlayPauseButton(false);
     }
+
+    updateMenuAvailability();
 }
 
 void MainWindow::updateControlsLayoutMode()
 {
-    updateControlsLayoutMode(width() < kCompactControlsThresholdPx);
+    if (m_compactOverrideEnabled) {
+        updateControlsLayoutMode(m_compactOverrideValue);
+    } else {
+        updateControlsLayoutMode(width() < kCompactControlsThresholdPx);
+    }
 }
 
 void MainWindow::updateControlsLayoutMode(bool compact)
@@ -2302,6 +2544,14 @@ void MainWindow::updateControlsLayoutMode(bool compact)
 
     updateRepeatButton();
     refreshPlaylistStyles();
+    if (m_viewCompactAction) {
+        const QSignalBlocker blocker(m_viewCompactAction);
+        if (m_compactOverrideEnabled) {
+            m_viewCompactAction->setChecked(m_compactOverrideValue);
+        } else {
+            m_viewCompactAction->setChecked(false);
+        }
+    }
 }
 
 void MainWindow::setWidgetOpacity(QGraphicsOpacityEffect *effect, QPropertyAnimation *animation, qreal value, int durationMs)
