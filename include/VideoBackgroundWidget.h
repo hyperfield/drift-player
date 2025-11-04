@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QVector>
 #include <QRectF>
+#include <QVariantMap>
 #include <memory>
 
 extern "C" {
@@ -57,6 +58,8 @@ public:
 
 signals:
     void mediaLoaded(const QString &path);
+    void metadataChanged(const QVariantMap &metadata);
+    void mediaTitleChanged(const QString &title);
     void playbackStateChanged(bool playing);
     void playbackFinished();
     void positionChanged(double position, double duration);

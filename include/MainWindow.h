@@ -9,6 +9,7 @@
 #include <QVector>
 #include <QQueue>
 #include <QFutureWatcher>
+#include <QVariantMap>
 
 class QListWidget;
 class QPushButton;
@@ -35,6 +36,8 @@ struct TrackEntry
     QString filePath;
     QString normalizedPath;
     double durationSeconds = -1.0;
+    bool isRemote = false;
+    QString platform;
 };
 
 enum class RepeatMode
@@ -77,6 +80,8 @@ private slots:
     void handleToggleFullscreen(bool checked);
     void handleShowAboutDrift();
     void handleShowAboutQt();
+    void handleMetadataChanged(const QVariantMap &metadata);
+    void handleMediaTitleChanged(const QString &title);
     void handlePlaylistActivated(QListWidgetItem *item);
     void handleShuffleToggled();
     void handleRepeatMode();
@@ -140,6 +145,11 @@ private:
     void clearPendingRestore();
     void applyRestoredProgressToUi(double position, double durationSeconds);
     void updateMenuAvailability();
+    [[nodiscard]] QString displayTitleForEntry(const TrackEntry &entry) const;
+    [[nodiscard]] QString displayTitleForIndex(int index) const;
+    void refreshNowPlayingLabel();
+    void updateTrackTitle(int index, const QString &title);
+    void startMetadataFetch(int index);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -223,4 +233,5 @@ protected:
     double m_restoreSeekTarget = 0.0;
     bool m_restoreShouldPlay = false;
     QString m_restoreNormalizedPath;
+    QSet<QString> m_metadataPending;
 };

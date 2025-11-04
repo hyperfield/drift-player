@@ -58,6 +58,11 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QUrl>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QVariant>
+#include <QVariantList>
 #include <QtConcurrent/QtConcurrentRun>
 #include <memory>
 #include <string>
@@ -120,6 +125,198 @@ bool isRemoteLocation(const QString &path)
 {
     const QUrl url = QUrl::fromUserInput(path);
     return url.isValid() && !url.isRelative() && !url.isLocalFile() && !url.scheme().isEmpty();
+}
+
+QString platformLabelForUrl(const QUrl &url)
+{
+    if (!url.isValid()) {
+        return QStringLiteral("Online");
+    }
+
+    QString host = url.host().toLower();
+    if (host.isEmpty()) {
+        return QStringLiteral("Online");
+    }
+
+    auto matches = [&](const char *needle) {
+        return host.contains(QLatin1String(needle));
+    };
+
+    if (matches("youtube") || matches("youtu.be")) {
+        return QStringLiteral("YouTube");
+    }
+    if (matches("vimeo")) {
+        return QStringLiteral("Vimeo");
+    }
+    if (matches("soundcloud")) {
+        return QStringLiteral("SoundCloud");
+    }
+    if (matches("twitch")) {
+        return QStringLiteral("Twitch");
+    }
+    if (matches("bandcamp")) {
+        return QStringLiteral("Bandcamp");
+    }
+    if (matches("mixcloud")) {
+        return QStringLiteral("Mixcloud");
+    }
+
+    QString trimmed = host;
+    if (trimmed.startsWith(QStringLiteral("www."))) {
+        trimmed.remove(0, 4);
+    }
+    const QStringList segments = trimmed.split('.');
+    QString base;
+    if (!segments.isEmpty()) {
+        base = segments.first();
+        if (base == QLatin1String("www") && segments.size() > 1) {
+            base = segments.at(1);
+        }
+        if (base == QLatin1String("m") && segments.size() > 1) {
+            base = segments.at(1);
+        }
+    }
+    if (base.isEmpty()) {
+        base = trimmed;
+    }
+
+    QString label = base.replace('-', ' ');
+    if (!label.isEmpty()) {
+        label[0] = label[0].toUpper();
+        for (int i = 1; i < label.size(); ++i) {
+            if (label[i - 1] == ' ') {
+                label[i] = label[i].toUpper();
+            }
+        }
+    }
+    if (label.isEmpty()) {
+        label = QStringLiteral("Online");
+    }
+    return label;
+}
+
+QString friendlyPlatformName(const QString &raw)
+{
+    if (raw.isEmpty()) {
+        return QString();
+    }
+
+    const QString lower = raw.toLower();
+    if (lower == QStringLiteral("youtube")) {
+        return QStringLiteral("YouTube");
+    }
+    if (lower == QStringLiteral("soundcloud")) {
+        return QStringLiteral("SoundCloud");
+    }
+    if (lower == QStringLiteral("twitch")) {
+        return QStringLiteral("Twitch");
+    }
+    if (lower == QStringLiteral("vimeo")) {
+        return QStringLiteral("Vimeo");
+    }
+
+    QString text = raw;
+    text.replace('_', ' ');
+    text.replace('-', ' ');
+    text = text.trimmed().toLower();
+    QString result;
+    bool capitalize = true;
+    for (QChar ch : text) {
+        if (capitalize) {
+            result.append(ch.toUpper());
+        } else {
+            result.append(ch);
+        }
+        capitalize = ch.isSpace();
+    }
+    return result;
+}
+
+struct MetadataResult
+{
+    bool success = false;
+    bool networkError = false;
+    QString title;
+    QString platform;
+    QString errorMessage;
+};
+
+MetadataResult fetchMetadataForRemote(const QString &urlString)
+{
+    MetadataResult result;
+    if (urlString.isEmpty()) {
+        return result;
+    }
+
+    QString program = QStandardPaths::findExecutable(QStringLiteral("yt-dlp"));
+    if (program.isEmpty()) {
+        program = QStandardPaths::findExecutable(QStringLiteral("youtube-dl"));
+    }
+    if (program.isEmpty()) {
+        result.errorMessage = QStringLiteral("yt-dlp not found on PATH");
+        return result;
+    }
+
+    QProcess process;
+    process.setProgram(program);
+    QStringList arguments{
+        QStringLiteral("--no-warnings"),
+        QStringLiteral("--dump-single-json"),
+        QStringLiteral("--skip-download"),
+        QStringLiteral("--no-playlist"),
+        urlString
+    };
+    process.setArguments(arguments);
+    process.start();
+
+    if (!process.waitForFinished(15000)) {
+        process.kill();
+        process.waitForFinished(2000);
+        result.networkError = true;
+        result.errorMessage = QStringLiteral("Metadata request timed out");
+        return result;
+    }
+
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        const QString errorText = QString::fromUtf8(process.readAllStandardError());
+        result.errorMessage = errorText;
+        const QString lowered = errorText.toLower();
+        if (lowered.contains(QStringLiteral("unable")) || lowered.contains(QStringLiteral("network"))
+            || lowered.contains(QStringLiteral("timed out")) || lowered.contains(QStringLiteral("connection"))
+            || lowered.contains(QStringLiteral("resolve"))) {
+            result.networkError = true;
+        }
+        return result;
+    }
+
+    const QByteArray output = process.readAllStandardOutput();
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(output, &parseError);
+    if (document.isNull() || !document.isObject()) {
+        result.errorMessage = parseError.errorString();
+        return result;
+    }
+
+    const QJsonObject object = document.object();
+    QString title = object.value(QStringLiteral("fulltitle")).toString();
+    if (title.isEmpty()) {
+        title = object.value(QStringLiteral("title")).toString();
+    }
+    QString extractor = object.value(QStringLiteral("extractor_key")).toString();
+    if (extractor.isEmpty()) {
+        extractor = object.value(QStringLiteral("extractor")).toString();
+    }
+
+    result.title = title.trimmed();
+    if (!extractor.isEmpty()) {
+        result.platform = friendlyPlatformName(extractor);
+    }
+
+    if (!result.title.isEmpty() || !result.platform.isEmpty()) {
+        result.success = true;
+    }
+
+    return result;
 }
 
 QString formatTime(double seconds)
@@ -546,18 +743,17 @@ void MainWindow::handlePlayPrevious()
 
 void MainWindow::handleOpenUrl()
 {
-    bool ok = false;
-    const QString input = QInputDialog::getText(this,
-                                                tr("Open URL"),
-                                                tr("Enter the media URL:"),
-                                                QLineEdit::Normal,
-                                                QString(),
-                                                &ok);
-    if (!ok) {
+    QInputDialog dialog(this);
+    dialog.setWindowTitle(tr("Open URL"));
+    dialog.setLabelText(tr("Enter the media URL:"));
+    dialog.setTextEchoMode(QLineEdit::Normal);
+    dialog.resize(720, dialog.sizeHint().height());
+    dialog.setMinimumWidth(720);
+    if (dialog.exec() != QDialog::Accepted) {
         return;
     }
 
-    const QString trimmed = input.trimmed();
+    const QString trimmed = dialog.textValue().trimmed();
     if (trimmed.isEmpty()) {
         return;
     }
@@ -678,6 +874,70 @@ void MainWindow::handleShowAboutDrift()
 void MainWindow::handleShowAboutQt()
 {
     QMessageBox::aboutQt(this);
+}
+
+void MainWindow::handleMetadataChanged(const QVariantMap &metadata)
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_tracks.size() || metadata.isEmpty()) {
+        return;
+    }
+
+    TrackEntry &entry = m_tracks[m_currentIndex];
+
+    if (entry.isRemote) {
+        QString platformCandidate = metadata.value(QStringLiteral("icy-name")).toString().trimmed();
+        if (platformCandidate.isEmpty()) {
+            platformCandidate = metadata.value(QStringLiteral("server_name")).toString().trimmed();
+        }
+        if (!platformCandidate.isEmpty()) {
+            entry.platform = friendlyPlatformName(platformCandidate);
+            updatePlaylistItem(m_currentIndex);
+            refreshNowPlayingLabel();
+            refreshNextLabel();
+            if (!m_isRestoringPlaylist) {
+                savePlaylistState();
+            }
+        }
+    }
+
+    QString candidate;
+    const QStringList priorityKeys{QStringLiteral("title"),
+                                   QStringLiteral("icy-title"),
+                                   QStringLiteral("stream-title"),
+                                   QStringLiteral("NAME"),
+                                   QStringLiteral("Title")};
+
+    for (const QString &key : priorityKeys) {
+        const QVariant value = metadata.value(key);
+        if (value.isValid()) {
+            candidate = value.toString().trimmed();
+            if (!candidate.isEmpty()) {
+                break;
+            }
+        }
+    }
+
+    if (candidate.isEmpty()) {
+        const QString artist = metadata.value(QStringLiteral("artist")).toString().trimmed();
+        const QString title = metadata.value(QStringLiteral("title")).toString().trimmed();
+        if (!artist.isEmpty() && !title.isEmpty()) {
+            candidate = QStringLiteral("%1 - %2").arg(artist, title);
+        } else if (!title.isEmpty()) {
+            candidate = title;
+        }
+    }
+
+    if (!candidate.isEmpty()) {
+        updateTrackTitle(m_currentIndex, candidate);
+    }
+}
+
+void MainWindow::handleMediaTitleChanged(const QString &title)
+{
+    if (title.trimmed().isEmpty()) {
+        return;
+    }
+    updateTrackTitle(m_currentIndex, title);
 }
 
 void MainWindow::handlePlaylistActivated(QListWidgetItem *item)
@@ -1668,6 +1928,8 @@ void MainWindow::setupUi()
     connect(m_videoWidget, &VideoBackgroundWidget::playbackStateChanged, this, &MainWindow::handlePlaybackStateChanged);
     connect(m_videoWidget, &VideoBackgroundWidget::playbackFinished, this, &MainWindow::handlePlaybackFinished);
     connect(m_videoWidget, &VideoBackgroundWidget::positionChanged, this, &MainWindow::handlePositionChanged);
+    connect(m_videoWidget, &VideoBackgroundWidget::metadataChanged, this, &MainWindow::handleMetadataChanged);
+    connect(m_videoWidget, &VideoBackgroundWidget::mediaTitleChanged, this, &MainWindow::handleMediaTitleChanged);
     connect(m_videoWidget, &VideoBackgroundWidget::blurModeChanged, this, [this](bool shaderActive) {
         if (m_blurSlider) {
             m_blurSlider->setEnabled(shaderActive);
@@ -1788,6 +2050,10 @@ bool MainWindow::addTrack(const QString &filePath)
     }
 
     TrackEntry entry{displayNameForFile(filePath), filePath, normalized};
+    entry.isRemote = remote;
+    if (remote) {
+        entry.platform = platformLabelForUrl(QUrl::fromUserInput(filePath));
+    }
     m_tracks.append(entry);
     const int index = m_tracks.size() - 1;
 
@@ -1808,6 +2074,9 @@ bool MainWindow::addTrack(const QString &filePath)
     }
 
     updateTransportAvailability();
+    if (entry.isRemote && !m_isRestoringPlaylist) {
+        startMetadataFetch(index);
+    }
     return true;
 }
 
@@ -1878,10 +2147,20 @@ void MainWindow::playTrack(int index)
         clearPendingRestore();
     }
 
+    if (entry.isRemote) {
+        startMetadataFetch(index);
+    }
+
     m_videoWidget->setAutoStartOnLoad(restoringTrack ? m_restoreShouldPlay : true);
 
     if (!m_videoWidget->loadFile(entry.filePath)) {
         spdlog::error("Failed to load track '{}'", entry.filePath);
+        if (entry.isRemote) {
+            QMessageBox::warning(this,
+                                 tr("Network Error"),
+                                 tr("Unable to load the remote media source.\n"
+                                    "Please check your network connection and try again."));
+        }
         if (restoringTrack) {
             clearPendingRestore();
         }
@@ -2023,6 +2302,7 @@ void MainWindow::removeTrackAt(int index)
 
     stopWatchingTrack(entry.normalizedPath);
     m_knownPaths.remove(entry.normalizedPath);
+    m_metadataPending.remove(entry.normalizedPath);
     m_tracks.removeAt(index);
 
     m_durationProbeQueue.removeAll(entry.normalizedPath);
@@ -2071,6 +2351,9 @@ void MainWindow::restorePlaylistState()
     }
 
     const QVariantList storedDurations = m_settings.value("playlist/durations").toList();
+    const QStringList storedTitles = m_settings.value("playlist/titles").toStringList();
+    const QStringList storedPlatforms = m_settings.value("playlist/platforms").toStringList();
+    const QVariantList storedRemotes = m_settings.value("playlist/remotes").toList();
 
     m_isRestoringPlaylist = true;
     for (int i = 0; i < stored.size(); ++i) {
@@ -2086,16 +2369,38 @@ void MainWindow::restorePlaylistState()
         }
 
         if (addTrack(path)) {
+            TrackEntry &entry = m_tracks.last();
+            if (i < storedRemotes.size()) {
+                entry.isRemote = storedRemotes.at(i).toBool();
+            }
+            if (entry.isRemote) {
+                if (i < storedPlatforms.size() && !storedPlatforms.at(i).isEmpty()) {
+                    entry.platform = storedPlatforms.at(i);
+                } else {
+                    entry.platform = platformLabelForUrl(QUrl::fromUserInput(entry.filePath));
+                }
+            }
+            if (i < storedTitles.size() && !storedTitles.at(i).isEmpty()) {
+                entry.title = storedTitles.at(i);
+            }
             if (i < storedDurations.size()) {
                 double storedDuration = storedDurations.at(i).toDouble();
                 if (storedDuration > 0.5 && !m_tracks.isEmpty()) {
-                    m_tracks.last().durationSeconds = storedDuration;
+                    entry.durationSeconds = storedDuration;
                     updatePlaylistItem(m_tracks.size() - 1);
-                } else if (!remote) {
+                } else if (!entry.isRemote) {
                     enqueueDurationProbe(path);
                 }
-            } else if (!remote) {
+            } else if (!entry.isRemote) {
                 enqueueDurationProbe(path);
+            }
+            updatePlaylistItem(m_tracks.size() - 1);
+            if (entry.isRemote) {
+                const QString defaultTitle = displayNameForFile(entry.filePath);
+                const QString trimmedTitle = entry.title.trimmed();
+                if (trimmedTitle.isEmpty() || trimmedTitle.compare(defaultTitle, Qt::CaseInsensitive) == 0) {
+                    startMetadataFetch(m_tracks.size() - 1);
+                }
             }
         }
     }
@@ -2314,8 +2619,29 @@ void MainWindow::savePlaylistState()
         durations.append(entry.durationSeconds);
     }
 
+    QStringList titles;
+    titles.reserve(m_tracks.size());
+    for (const TrackEntry &entry : m_tracks) {
+        titles.append(entry.title);
+    }
+
+    QStringList platforms;
+    platforms.reserve(m_tracks.size());
+    for (const TrackEntry &entry : m_tracks) {
+        platforms.append(entry.platform);
+    }
+
+    QVariantList remotes;
+    remotes.reserve(m_tracks.size());
+    for (const TrackEntry &entry : m_tracks) {
+        remotes.append(entry.isRemote);
+    }
+
     m_settings.setValue("playlist/paths", paths);
     m_settings.setValue("playlist/durations", durations);
+    m_settings.setValue("playlist/titles", titles);
+    m_settings.setValue("playlist/platforms", platforms);
+    m_settings.setValue("playlist/remotes", remotes);
     refreshPlaylistStyles();
 }
 
@@ -2493,9 +2819,10 @@ void MainWindow::updatePlaylistItem(int index)
     }
 
     const TrackEntry &entry = m_tracks.at(index);
-    item->setText(entry.title);
+    const QString displayText = displayTitleForEntry(entry);
+    item->setText(displayText);
     item->setData(Qt::UserRole, entry.filePath);
-    item->setToolTip(QStringLiteral("%1\n%2").arg(entry.title, entry.filePath));
+    item->setToolTip(QStringLiteral("%1\n%2").arg(displayText, entry.filePath));
 
     QString durationText;
     if (entry.durationSeconds > 0.5) {
@@ -2504,6 +2831,132 @@ void MainWindow::updatePlaylistItem(int index)
     item->setData(Qt::UserRole + 1, durationText);
 
     updatePlaylistRowState(index, item);
+}
+
+QString MainWindow::displayTitleForEntry(const TrackEntry &entry) const
+{
+    QString base = entry.title.trimmed();
+    if (base.isEmpty()) {
+        base = displayNameForFile(entry.filePath);
+    }
+
+    if (entry.isRemote && !entry.platform.isEmpty()) {
+        const QString prefix = entry.platform + QStringLiteral(":");
+        if (base.startsWith(prefix, Qt::CaseInsensitive) || base.startsWith(entry.platform, Qt::CaseInsensitive)) {
+            return base;
+        }
+        return QStringLiteral("%1: %2").arg(entry.platform, base);
+    }
+
+    return base;
+}
+
+QString MainWindow::displayTitleForIndex(int index) const
+{
+    if (index < 0 || index >= m_tracks.size()) {
+        return QString();
+    }
+    return displayTitleForEntry(m_tracks.at(index));
+}
+
+void MainWindow::refreshNowPlayingLabel()
+{
+    if (!m_titleLabel) {
+        return;
+    }
+
+    if (m_currentIndex < 0 || m_currentIndex >= m_tracks.size()) {
+        m_titleLabel->setText(tr("Select a track to play"));
+        m_titleLabel->setToolTip(QString());
+        return;
+    }
+
+    const QString display = displayTitleForEntry(m_tracks.at(m_currentIndex));
+    m_titleLabel->setText(tr("Now Playing: %1").arg(display));
+    m_titleLabel->setToolTip(display);
+}
+
+void MainWindow::updateTrackTitle(int index, const QString &title)
+{
+    if (index < 0 || index >= m_tracks.size()) {
+        return;
+    }
+
+    QString normalized = title.trimmed();
+    if (normalized.isEmpty()) {
+        return;
+    }
+
+    TrackEntry &entry = m_tracks[index];
+    if (entry.title.compare(normalized, Qt::CaseInsensitive) == 0) {
+        return;
+    }
+
+    entry.title = normalized;
+    updatePlaylistItem(index);
+
+    if (index == m_currentIndex) {
+        refreshNowPlayingLabel();
+    }
+
+    if (!m_isRestoringPlaylist) {
+        savePlaylistState();
+    }
+}
+
+void MainWindow::startMetadataFetch(int index)
+{
+    if (index < 0 || index >= m_tracks.size()) {
+        return;
+    }
+
+    const TrackEntry &entry = m_tracks.at(index);
+    if (!entry.isRemote || entry.normalizedPath.isEmpty()) {
+        return;
+    }
+
+    if (m_metadataPending.contains(entry.normalizedPath)) {
+        return;
+    }
+
+    m_metadataPending.insert(entry.normalizedPath);
+
+    auto *watcher = new QFutureWatcher<MetadataResult>(this);
+    connect(watcher, &QFutureWatcher<MetadataResult>::finished, this, [this, watcher, path = entry.normalizedPath]() {
+        const MetadataResult result = watcher->result();
+        watcher->deleteLater();
+        m_metadataPending.remove(path);
+
+        const int idx = indexForNormalizedPath(path);
+        if (idx == -1) {
+            return;
+        }
+
+        if (!result.success) {
+            if (!result.errorMessage.isEmpty()) {
+                spdlog::debug("Metadata fetch failed for '{}': {}", path.toStdString(), result.errorMessage.toStdString());
+            }
+            return;
+        }
+
+        TrackEntry &track = m_tracks[idx];
+        if (track.isRemote && !result.platform.isEmpty()) {
+            track.platform = result.platform;
+        }
+        if (!result.title.trimmed().isEmpty()) {
+            updateTrackTitle(idx, result.title.trimmed());
+        } else {
+            updatePlaylistItem(idx);
+            if (idx == m_currentIndex) {
+                refreshNowPlayingLabel();
+            }
+            refreshNextLabel();
+        }
+    });
+
+    watcher->setFuture(QtConcurrent::run([url = entry.filePath]() {
+        return fetchMetadataForRemote(url);
+    }));
 }
 
 void MainWindow::updatePlayPauseButton(bool playing)
@@ -2711,9 +3164,7 @@ void MainWindow::updateNowPlaying(const QString &filePath)
         return;
     }
 
-    const QString title = displayNameForFile(filePath);
-    m_titleLabel->setText(tr("Now Playing: %1").arg(title));
-    m_titleLabel->setToolTip(title);
+    refreshNowPlayingLabel();
     refreshNextLabel();
     m_lastDuration = 0.0;
     m_progressSliderPressed = false;
@@ -2749,7 +3200,7 @@ void MainWindow::setNextLabelText(int nextIndex)
     }
 
     if (nextIndex >= 0 && nextIndex < m_tracks.size()) {
-        const QString nextTitle = displayNameForFile(m_tracks.at(nextIndex).filePath);
+        const QString nextTitle = displayTitleForEntry(m_tracks.at(nextIndex));
         m_nextLabel->setText(tr("Next: %1").arg(nextTitle));
         m_nextLabel->setToolTip(nextTitle);
     } else {

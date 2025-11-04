@@ -19,6 +19,9 @@
 #include <QMetaType>
 #include <QtDebug>
 #include <QRandomGenerator>
+#include <QVariant>
+#include <QVariantMap>
+#include <QVariantList>
 
 #include <spdlog/spdlog.h>
 
@@ -100,6 +103,48 @@ void main() {
     gl_FragColor = color;
 }
 )";
+
+QVariant mpvNodeToVariant(const mpv_node *node)
+{
+    if (!node) {
+        return QVariant();
+    }
+
+    switch (node->format) {
+    case MPV_FORMAT_STRING:
+        return QString::fromUtf8(node->u.string ? node->u.string : "");
+    case MPV_FORMAT_INT64:
+        return static_cast<qlonglong>(node->u.int64);
+    case MPV_FORMAT_DOUBLE:
+        return node->u.double_;
+    case MPV_FORMAT_FLAG:
+        return static_cast<bool>(node->u.flag);
+    case MPV_FORMAT_NODE_ARRAY: {
+        QVariantList list;
+        if (node->u.list) {
+            for (int i = 0; i < node->u.list->num; ++i) {
+                list.append(mpvNodeToVariant(&node->u.list->values[i]));
+            }
+        }
+        return list;
+    }
+    case MPV_FORMAT_NODE_MAP: {
+        QVariantMap map;
+        if (node->u.list) {
+            for (int i = 0; i < node->u.list->num; ++i) {
+                const char *key = node->u.list->keys ? node->u.list->keys[i] : nullptr;
+                if (!key) {
+                    continue;
+                }
+                map.insert(QString::fromUtf8(key), mpvNodeToVariant(&node->u.list->values[i]));
+            }
+        }
+        return map;
+    }
+    default:
+        return QVariant();
+    }
+}
 
 } // namespace
 
@@ -598,6 +643,8 @@ void VideoBackgroundWidget::initializeMpv()
     mpv_observe_property(m_mpv, 0, "eof-reached", MPV_FORMAT_FLAG);
     mpv_observe_property(m_mpv, 0, "duration", MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_mpv, 0, "hwdec-current", MPV_FORMAT_STRING);
+    mpv_observe_property(m_mpv, 0, "metadata", MPV_FORMAT_NODE);
+    mpv_observe_property(m_mpv, 0, "media-title", MPV_FORMAT_STRING);
     updateHardwareLogging();
 }
 
@@ -742,6 +789,22 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
                         m_positionTimer.start();
                     }
                 }
+            }
+        } else if (name == "metadata") {
+            mpv_node node{};
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_NODE, &node) >= 0) {
+                QVariant variant = mpvNodeToVariant(&node);
+                mpv_free_node_contents(&node);
+                if (variant.canConvert<QVariantMap>()) {
+                    emit metadataChanged(variant.toMap());
+                }
+            }
+        } else if (name == "media-title" && payload.format == MPV_FORMAT_STRING) {
+            char *value = nullptr;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_STRING, &value) >= 0) {
+                QString title = QString::fromUtf8(value ? value : "");
+                mpv_free(value);
+                emit mediaTitleChanged(title);
             }
         } else if (name == "eof-reached" && payload.format == MPV_FORMAT_FLAG) {
             int eofFlag = 0;
