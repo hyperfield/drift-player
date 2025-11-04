@@ -747,8 +747,11 @@ void MainWindow::handleOpenUrl()
     dialog.setWindowTitle(tr("Open URL"));
     dialog.setLabelText(tr("Enter the media URL:"));
     dialog.setTextEchoMode(QLineEdit::Normal);
-    dialog.resize(720, dialog.sizeHint().height());
-    dialog.setMinimumWidth(720);
+    dialog.setComboBoxEditable(true);
+    dialog.setComboBoxItems(m_recentUrls);
+    dialog.setTextValue(m_recentUrls.isEmpty() ? QString() : m_recentUrls.first());
+    dialog.resize(400, dialog.sizeHint().height());
+    dialog.setMinimumWidth(400);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -774,6 +777,7 @@ void MainWindow::handleOpenUrl()
     }
 
     if (!addTrack(targetSource)) {
+        addUrlToHistory(trimmed);
         QMessageBox::information(this,
                                  tr("Already Added"),
                                  tr("That source is already present in the playlist."));
@@ -797,6 +801,7 @@ void MainWindow::handleOpenUrl()
 
     refreshPlaylistStyles();
     updateTransportAvailability();
+    addUrlToHistory(trimmed);
 }
 
 void MainWindow::handleLoadPlaylist()
@@ -1261,13 +1266,21 @@ void MainWindow::handlePlaylistContextMenu(const QPoint &pos)
     shadow->setOffset(0, 8);
     menu.setGraphicsEffect(shadow);
 
+    bool remoteItem = false;
+    if (m_contextMenuIndex >= 0 && m_contextMenuIndex < m_tracks.size()) {
+        remoteItem = m_tracks.at(m_contextMenuIndex).isRemote;
+    }
+
     QAction *deletePlaylistAction = menu.addAction(tr("Delete from Playlist"));
-    QAction *deleteDiskAction = menu.addAction(tr("Delete from Disk"));
+    QAction *deleteDiskAction = nullptr;
+    if (!remoteItem) {
+        deleteDiskAction = menu.addAction(tr("Delete from Disk"));
+    }
 
     QAction *chosen = menu.exec(m_playlist->viewport()->mapToGlobal(pos));
     if (chosen == deletePlaylistAction) {
         handleDeleteTrackFromPlaylist();
-    } else if (chosen == deleteDiskAction) {
+    } else if (deleteDiskAction && chosen == deleteDiskAction) {
         handleDeleteTrackFromDisk();
     } else {
         m_contextMenuIndex = -1;
@@ -1289,7 +1302,15 @@ void MainWindow::handleDeleteTrackFromDisk()
         return;
     }
 
-    const QString path = m_tracks.at(index).normalizedPath;
+    const TrackEntry entry = m_tracks.at(index);
+    if (entry.isRemote) {
+        QMessageBox::information(this,
+                                 tr("Unavailable"),
+                                 tr("Streaming entries cannot be deleted from disk."));
+        return;
+    }
+
+    const QString path = entry.normalizedPath;
     const QMessageBox::StandardButton response = QMessageBox::question(
         this,
         tr("Delete from Disk"),
@@ -1948,6 +1969,24 @@ void MainWindow::setupUi()
 
 void MainWindow::loadSettings()
 {
+    const QStringList storedHistory = m_settings.value("playback/urlHistory").toStringList();
+    QStringList cleaned;
+    cleaned.reserve(storedHistory.size());
+    for (const QString &entry : storedHistory) {
+        const QString trimmed = entry.trimmed();
+        if (trimmed.isEmpty()) {
+            continue;
+        }
+        if (cleaned.contains(trimmed)) {
+            continue;
+        }
+        cleaned.append(trimmed);
+        if (cleaned.size() >= 50) {
+            break;
+        }
+    }
+    m_recentUrls = cleaned;
+
     const int volume = m_settings.value("audio/volume", kDefaultVolume).toInt();
     m_volumeSlider->setValue(volume);
     m_videoWidget->setVolume(volume);
@@ -2023,6 +2062,7 @@ void MainWindow::saveSettings()
         m_settings.remove("playback/position");
         m_settings.remove("playback/wasPlaying");
     }
+    m_settings.setValue("playback/urlHistory", m_recentUrls);
     m_settings.sync();
 }
 
@@ -2904,6 +2944,24 @@ void MainWindow::updateTrackTitle(int index, const QString &title)
     }
 }
 
+void MainWindow::addUrlToHistory(const QString &url)
+{
+    const QString trimmed = url.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+
+    m_recentUrls.removeAll(trimmed);
+    m_recentUrls.prepend(trimmed);
+
+    const int maxHistory = 50;
+    while (m_recentUrls.size() > maxHistory) {
+        m_recentUrls.removeLast();
+    }
+
+    m_settings.setValue("playback/urlHistory", m_recentUrls);
+}
+
 void MainWindow::startMetadataFetch(int index)
 {
     if (index < 0 || index >= m_tracks.size()) {
@@ -2912,6 +2970,14 @@ void MainWindow::startMetadataFetch(int index)
 
     const TrackEntry &entry = m_tracks.at(index);
     if (!entry.isRemote || entry.normalizedPath.isEmpty()) {
+        return;
+    }
+
+    const QString trimmedTitle = entry.title.trimmed();
+    const QString defaultTitle = displayNameForFile(entry.filePath);
+    const bool needsTitle = trimmedTitle.isEmpty() || trimmedTitle.compare(defaultTitle, Qt::CaseInsensitive) == 0;
+    const bool needsPlatform = entry.platform.trimmed().isEmpty();
+    if (!needsTitle && !needsPlatform) {
         return;
     }
 
@@ -2951,6 +3017,9 @@ void MainWindow::startMetadataFetch(int index)
                 refreshNowPlayingLabel();
             }
             refreshNextLabel();
+            if (!m_isRestoringPlaylist) {
+                savePlaylistState();
+            }
         }
     });
 

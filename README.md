@@ -2,6 +2,20 @@
 
 Drift Player is a cross-platform desktop media player that pairs a modern Qt 6 interface with the mpv playback engine. It focuses on an ambient viewing experience: blurred video backdrops, a curated playlist flow, and lightweight playback controls that stay out of the way while you watch or listen.
 
+Or, to put it differently:
+
+> **Drift Player drifts**
+> between worlds of sound and sight,  
+> a window of quiet glow.  
+>
+> Its heart, *mpv*,  
+> beats beneath a glassy calm,
+> where motion softens, fades.  
+>
+> Blur and light entwine,  
+> controls retreat like thought in dream,  
+> and playlists flow like time.
+
 ![Drift Player screenshot](docs/screenshot.png)
 
 

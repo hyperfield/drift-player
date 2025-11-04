@@ -6,6 +6,7 @@
 #include <QSettings>
 #include <QTimer>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <QQueue>
 #include <QFutureWatcher>
@@ -149,6 +150,7 @@ private:
     [[nodiscard]] QString displayTitleForIndex(int index) const;
     void refreshNowPlayingLabel();
     void updateTrackTitle(int index, const QString &title);
+    void addUrlToHistory(const QString &url);
     void startMetadataFetch(int index);
 
 protected:
@@ -201,6 +203,7 @@ protected:
     bool m_debugBassVisualizer = false;
 
     QVector<TrackEntry> m_tracks;
+    QStringList m_recentUrls;
     int m_currentIndex = -1;
     bool m_shuffleEnabled = false;
     RepeatMode m_repeatMode = RepeatMode::None;
