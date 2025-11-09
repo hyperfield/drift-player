@@ -18,6 +18,10 @@
 #include <QThread>
 #include <QMetaType>
 #include <QtDebug>
+#include <QRandomGenerator>
+#include <QVariant>
+#include <QVariantMap>
+#include <QVariantList>
 
 #include <spdlog/spdlog.h>
 
@@ -100,6 +104,48 @@ void main() {
 }
 )";
 
+QVariant mpvNodeToVariant(const mpv_node *node)
+{
+    if (!node) {
+        return QVariant();
+    }
+
+    switch (node->format) {
+    case MPV_FORMAT_STRING:
+        return QString::fromUtf8(node->u.string ? node->u.string : "");
+    case MPV_FORMAT_INT64:
+        return static_cast<qlonglong>(node->u.int64);
+    case MPV_FORMAT_DOUBLE:
+        return node->u.double_;
+    case MPV_FORMAT_FLAG:
+        return static_cast<bool>(node->u.flag);
+    case MPV_FORMAT_NODE_ARRAY: {
+        QVariantList list;
+        if (node->u.list) {
+            for (int i = 0; i < node->u.list->num; ++i) {
+                list.append(mpvNodeToVariant(&node->u.list->values[i]));
+            }
+        }
+        return list;
+    }
+    case MPV_FORMAT_NODE_MAP: {
+        QVariantMap map;
+        if (node->u.list) {
+            for (int i = 0; i < node->u.list->num; ++i) {
+                const char *key = node->u.list->keys ? node->u.list->keys[i] : nullptr;
+                if (!key) {
+                    continue;
+                }
+                map.insert(QString::fromUtf8(key), mpvNodeToVariant(&node->u.list->values[i]));
+            }
+        }
+        return map;
+    }
+    default:
+        return QVariant();
+    }
+}
+
 } // namespace
 
 Q_DECLARE_METATYPE(MpvEventPayload);
@@ -151,6 +197,8 @@ void MpvEventWorker::process()
             }
         }
 
+        spdlog::debug("mpv worker event id={} prop='{}' fmt={}", payload.id, payload.propertyName.constData(), payload.format);
+
         emit eventReady(payload);
 
         if (!m_running.load(std::memory_order_acquire) || event->event_id == MPV_EVENT_SHUTDOWN) {
@@ -181,12 +229,59 @@ VideoBackgroundWidget::VideoBackgroundWidget(QWidget *parent)
     m_positionTimer.setSingleShot(false);
     connect(&m_positionTimer, &QTimer::timeout, this, &VideoBackgroundWidget::pollPlaybackPosition);
 
+    m_bassTimer.setInterval(33);
+    m_bassTimer.setSingleShot(false);
+    connect(&m_bassTimer, &QTimer::timeout, this, [this]() {
+        if (!isVisible()) {
+            return;
+        }
+
+        m_bassPhase += 0.24;
+        if (m_bassPhase > 2.0 * M_PI) {
+            m_bassPhase -= 2.0 * M_PI;
+        }
+
+        const double base = (std::sin(m_bassPhase) + 1.0) * 0.5;
+        const double modulation = (std::sin(m_bassPhase * 0.5 + 1.7) + 1.0) * 0.5;
+        double amplitude = (0.65 * base + 0.35 * modulation);
+        amplitude = std::clamp(amplitude, 0.0, 1.0);
+        if (!m_bassEnabled) {
+            amplitude = 0.0;
+        }
+
+        if (amplitude > m_bassThreshold) {
+            const double intensity = (amplitude - m_bassThreshold);
+            m_bassFlash = std::min(1.0, m_bassFlash + intensity * 0.5 + 0.05);
+
+            m_bassStripes.clear();
+            const int stripes = 2 + static_cast<int>(intensity * 6.0);
+            for (int i = 0; i < stripes; ++i) {
+                const double topRatio = QRandomGenerator::global()->generateDouble();
+                const double heightRatio = std::clamp(intensity * (0.08 + QRandomGenerator::global()->generateDouble() * 0.17), 0.02, 0.4);
+                m_bassStripes.append(QRectF(0.0, topRatio, 1.0, heightRatio));
+            }
+        } else {
+            m_bassFlash *= 0.90;
+            if (m_bassFlash < 0.015) {
+                m_bassFlash = 0.0;
+                m_bassStripes.clear();
+                scheduleUpdate();
+            }
+        }
+
+        if (m_bassFlash > 0.01) {
+            scheduleUpdate();
+        }
+    });
+    m_bassTimer.start();
+
     initializeMpv();
 }
 
 VideoBackgroundWidget::~VideoBackgroundWidget()
 {
     m_positionTimer.stop();
+    m_bassTimer.stop();
     makeCurrent();
     releaseBlurResources();
     removeMpvShader();
@@ -203,21 +298,29 @@ bool VideoBackgroundWidget::loadFile(const QString &filePath)
 
     spdlog::info("Loading media {}", filePath);
 
+    // ensure mpv sees pause command after the new file is ready
+    int pausedFlag = 1;
+    mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag);
+    m_isPaused = true;
+
+    m_ignoreStopEndFile = true;
     QByteArray encoded = QFile::encodeName(filePath);
     const char *loadCmd[] = {"loadfile", encoded.constData(), "replace", nullptr};
     if (mpv_command(m_mpv, loadCmd) < 0) {
         spdlog::error("mpv failed to load file {}", filePath);
+        m_ignoreStopEndFile = false;
         return false;
     }
+    spdlog::info("mpv loadfile issued for {}", filePath);
 
     m_currentPath = filePath;
     m_hasMedia = true;
-    m_isPaused = false;
+    m_isPaused = true;
     m_position = 0.0;
     m_duration = 0.0;
 
     emit mediaLoaded(filePath);
-    emit playbackStateChanged(true);
+    emit playbackStateChanged(false);
     emit positionChanged(m_position, m_duration);
 
     return true;
@@ -225,11 +328,13 @@ bool VideoBackgroundWidget::loadFile(const QString &filePath)
 
 void VideoBackgroundWidget::play()
 {
+    spdlog::debug("VideoBackgroundWidget::play() current paused={}", m_isPaused);
     setPaused(false);
 }
 
 void VideoBackgroundWidget::pause()
 {
+    spdlog::debug("VideoBackgroundWidget::pause() current paused={}", m_isPaused);
     setPaused(true);
 }
 
@@ -240,12 +345,14 @@ void VideoBackgroundWidget::setPaused(bool paused)
     }
 
     int flag = paused ? 1 : 0;
-    if (mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &flag) < 0) {
-        qWarning() << "Failed to set pause state";
+    const int rc = mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &flag);
+    if (rc < 0) {
+        spdlog::warn("Failed to set pause={} (rc={})", paused, rc);
         return;
     }
 
     m_isPaused = paused;
+    spdlog::debug("Pause state updated paused={}", m_isPaused);
     emit playbackStateChanged(!m_isPaused);
 }
 
@@ -280,6 +387,32 @@ void VideoBackgroundWidget::setBlurAmount(float amount)
 float VideoBackgroundWidget::blurAmount() const
 {
     return m_blurAmount;
+}
+
+void VideoBackgroundWidget::setBassThreshold(double threshold)
+{
+    m_bassThreshold = std::clamp(threshold, 0.0, 1.0);
+}
+
+void VideoBackgroundWidget::setBassEnabled(bool enabled)
+{
+    m_bassEnabled = enabled;
+    if (!m_bassEnabled) {
+        m_bassFlash = 0.0;
+        m_bassStripes.clear();
+        scheduleUpdate();
+    }
+}
+
+void VideoBackgroundWidget::setAutoStartOnLoad(bool autoStart)
+{
+    m_autoStartOnLoad = autoStart;
+}
+
+void VideoBackgroundWidget::requestFrame()
+{
+    spdlog::debug("VideoBackgroundWidget::requestFrame() scheduling update");
+    scheduleUpdate();
 }
 
 bool VideoBackgroundWidget::hasMedia() const
@@ -337,6 +470,7 @@ void VideoBackgroundWidget::initializeGL()
 void VideoBackgroundWidget::seek(double seconds)
 {
     if (!m_mpv || !m_hasMedia) {
+        spdlog::warn("Seek ignored seconds={} m_mpv={} hasMedia={}", seconds, static_cast<bool>(m_mpv), m_hasMedia);
         return;
     }
 
@@ -344,14 +478,18 @@ void VideoBackgroundWidget::seek(double seconds)
         seconds = 0.0;
     }
 
-    if (mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &seconds) < 0) {
-        qWarning() << "Failed to seek" << seconds;
+    const int rc = mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &seconds);
+    if (rc < 0) {
+        spdlog::warn("Failed to seek to {} (rc={})", seconds, rc);
+    } else {
+        spdlog::debug("Seek requested to {} (rc={})", seconds, rc);
     }
 }
 
 void VideoBackgroundWidget::paintGL()
 {
     if (!m_mpvRender) {
+        spdlog::warn("paintGL: render context missing");
         return;
     }
 
@@ -386,10 +524,12 @@ void VideoBackgroundWidget::paintGL()
         {MPV_RENDER_PARAM_INVALID, nullptr}
     };
 
-    if (mpv_render_context_render(m_mpvRender, params) < 0) {
-        qWarning() << "mpv failed to render frame";
+    const int renderRc = mpv_render_context_render(m_mpvRender, params);
+    if (renderRc < 0) {
+        spdlog::warn("mpv failed to render frame rc={}", renderRc);
         return;
     }
+    spdlog::debug("paintGL: rendered frame {}x{} blur={}", targetWidth, targetHeight, useBlur);
 
     if (useBlur) {
         renderBlurPass();
@@ -401,6 +541,28 @@ void VideoBackgroundWidget::paintGL()
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), QColor(0, 0, 0, 110));
+
+    if (m_bassFlash > 0.01) {
+        const double intensity = std::clamp(m_bassFlash, 0.0, 1.0);
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setOpacity(intensity * 0.45);
+        painter.fillRect(rect(), QColor(140, 80, 255, 120));
+        painter.setOpacity(intensity * 0.35);
+        painter.setPen(Qt::NoPen);
+        painter.setCompositionMode(QPainter::CompositionMode_Screen);
+        const double totalHeight = static_cast<double>(height());
+        const double totalWidth = static_cast<double>(width());
+        for (const QRectF &stripe : m_bassStripes) {
+            double top = stripe.y() * totalHeight;
+            double h = stripe.height() * totalHeight;
+            top = std::clamp(top, 0.0, totalHeight);
+            h = std::max(4.0, std::min(h, totalHeight - top));
+            QRectF drawRect(0.0, top, totalWidth, h);
+            painter.fillRect(drawRect, QColor(255, 255, 255, 140));
+        }
+        painter.restore();
+    }
 }
 
 void VideoBackgroundWidget::resizeGL(int w, int h)
@@ -478,8 +640,11 @@ void VideoBackgroundWidget::initializeMpv()
     m_mpvEventThread->start();
 
     mpv_observe_property(m_mpv, 0, "pause", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, 0, "eof-reached", MPV_FORMAT_FLAG);
     mpv_observe_property(m_mpv, 0, "duration", MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_mpv, 0, "hwdec-current", MPV_FORMAT_STRING);
+    mpv_observe_property(m_mpv, 0, "metadata", MPV_FORMAT_NODE);
+    mpv_observe_property(m_mpv, 0, "media-title", MPV_FORMAT_STRING);
     updateHardwareLogging();
 }
 
@@ -531,6 +696,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
 {
     switch (payload.id) {
     case MPV_EVENT_FILE_LOADED: {
+        spdlog::debug("MPV_EVENT_FILE_LOADED path='{}' autoStart={}", m_currentPath.toStdString(), m_autoStartOnLoad);
         double duration = 0.0;
         if (mpv_get_property(m_mpv, "duration", MPV_FORMAT_DOUBLE, &duration) >= 0 && std::isfinite(duration)) {
             if (duration < 0.0) {
@@ -550,18 +716,48 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
         } else {
             m_position = 0.0;
         }
+        spdlog::debug("File loaded duration={} position={} paused={}", m_duration, m_position, m_isPaused);
 
         emit positionChanged(m_position, m_duration);
         updateHardwareLogging();
         if (!m_isPaused) {
             m_positionTimer.start();
         }
+        if (m_autoStartOnLoad) {
+            int pausedFlag = 0;
+            if (mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag) >= 0) {
+                if (m_isPaused) {
+                    m_isPaused = false;
+                    emit playbackStateChanged(true);
+                }
+                if (!m_positionTimer.isActive()) {
+                    m_positionTimer.start();
+                }
+            }
+        } else {
+            int pausedFlag = 1;
+            mpv_set_property(m_mpv, "pause", MPV_FORMAT_FLAG, &pausedFlag);
+            if (!m_isPaused) {
+                m_isPaused = true;
+                emit playbackStateChanged(false);
+            }
+            m_positionTimer.stop();
+        }
+        scheduleUpdate();
+        m_autoStartOnLoad = true;
+        m_ignoreStopEndFile = false;
         break;
     }
     case MPV_EVENT_END_FILE: {
         const auto reason = static_cast<mpv_end_file_reason>(payload.endFileReason);
+        spdlog::info("MPV end file reason={} ignoreStop={}", static_cast<int>(reason), m_ignoreStopEndFile);
         if (reason == MPV_END_FILE_REASON_STOP) {
-            break;
+            if (m_ignoreStopEndFile) {
+                m_ignoreStopEndFile = false;
+                break;
+            }
+        } else {
+            m_ignoreStopEndFile = false;
         }
 
         m_hasMedia = false;
@@ -584,12 +780,45 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
             if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_FLAG, &pausedFlag) >= 0) {
                 bool paused = pausedFlag != 0;
                 if (paused != m_isPaused) {
+                    spdlog::debug("pause property changed -> {}", paused);
                     m_isPaused = paused;
                     emit playbackStateChanged(!m_isPaused);
                     if (m_isPaused) {
                         m_positionTimer.stop();
                     } else {
                         m_positionTimer.start();
+                    }
+                }
+            }
+        } else if (name == "metadata") {
+            mpv_node node{};
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_NODE, &node) >= 0) {
+                QVariant variant = mpvNodeToVariant(&node);
+                mpv_free_node_contents(&node);
+                if (variant.canConvert<QVariantMap>()) {
+                    emit metadataChanged(variant.toMap());
+                }
+            }
+        } else if (name == "media-title" && payload.format == MPV_FORMAT_STRING) {
+            char *value = nullptr;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_STRING, &value) >= 0) {
+                QString title = QString::fromUtf8(value ? value : "");
+                mpv_free(value);
+                emit mediaTitleChanged(title);
+            }
+        } else if (name == "eof-reached" && payload.format == MPV_FORMAT_FLAG) {
+            int eofFlag = 0;
+            if (mpv_get_property(m_mpv, name.constData(), MPV_FORMAT_FLAG, &eofFlag) >= 0) {
+                bool reached = eofFlag != 0;
+                spdlog::info("mpv eof-reached={} ignoreStop={}", reached, m_ignoreStopEndFile);
+                if (reached) {
+                    m_ignoreStopEndFile = false;
+                    if (m_hasMedia) {
+                        m_hasMedia = false;
+                        m_isPaused = true;
+                        m_positionTimer.stop();
+                        emit playbackFinished();
+                        emit playbackStateChanged(false);
                     }
                 }
             }
@@ -602,6 +831,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
             } else {
                 duration = 0.0;
             }
+            spdlog::debug("duration property change -> {}", duration);
 
             if (std::fabs(m_duration - duration) > 0.01) {
                 m_duration = duration;
@@ -618,6 +848,7 @@ void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
             }
 
             m_position = position;
+            spdlog::debug("time-pos property change -> {}", m_position);
             emit positionChanged(m_position, m_duration);
         } else if (name == "hwdec-current" && payload.format == MPV_FORMAT_STRING) {
             char *value = nullptr;

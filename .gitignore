@@ -46,3 +46,6 @@ install_manifest.txt
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Development artifacts
+notes/

@@ -5,6 +5,9 @@
 #include <QScopedPointer>
 #include <QByteArray>
 #include <QTimer>
+#include <QVector>
+#include <QRectF>
+#include <QVariantMap>
 #include <memory>
 
 extern "C" {
@@ -43,6 +46,10 @@ public:
     void setBlurAmount(float amount);
     float blurAmount() const;
     void seek(double seconds);
+    void setBassThreshold(double threshold);
+    void setBassEnabled(bool enabled);
+    void setAutoStartOnLoad(bool autoStart);
+    void requestFrame();
 
     [[nodiscard]] bool hasMedia() const;
     [[nodiscard]] bool isPaused() const;
@@ -51,6 +58,8 @@ public:
 
 signals:
     void mediaLoaded(const QString &path);
+    void metadataChanged(const QVariantMap &metadata);
+    void mediaTitleChanged(const QString &title);
     void playbackStateChanged(bool playing);
     void playbackFinished();
     void positionChanged(double position, double duration);
@@ -110,5 +119,13 @@ private:
     bool m_lastHwdecState = false;
     QString m_mpvShaderPath;
     bool m_mpvShaderActive = false;
+    bool m_autoStartOnLoad = true;
     QTimer m_positionTimer;
+    bool m_ignoreStopEndFile = false;
+    QTimer m_bassTimer;
+    double m_bassThreshold = 0.6;
+    double m_bassFlash = 0.0;
+    double m_bassPhase = 0.0;
+    bool m_bassEnabled = true;
+    QVector<QRectF> m_bassStripes;
 };

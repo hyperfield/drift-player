@@ -2,6 +2,20 @@
 
 Drift Player is a cross-platform desktop media player that pairs a modern Qt 6 interface with the mpv playback engine. It focuses on an ambient viewing experience: blurred video backdrops, a curated playlist flow, and lightweight playback controls that stay out of the way while you watch or listen.
 
+Or, to put it differently:
+
+> **Drift Player drifts**
+> between worlds of sound and sight,  
+> a window of quiet glow.  
+>
+> Its heart, *mpv*,  
+> beats beneath a glassy calm,
+> where motion softens, fades.  
+>
+> Blur and light entwine,  
+> controls retreat like thought in dream,  
+> and playlists flow like time.
+
 ![Drift Player screenshot](docs/screenshot.png)
 
 
@@ -28,6 +42,7 @@ Drift Player is a cross-platform desktop media player that pairs a modern Qt 6 i
 - **Adaptive controls** – transport, progress, and playlist panels fade in on interaction, keeping the canvas uncluttered when idle.
 - **Playback management** – seek with a scrubber, view elapsed/remaining time, toggle repeat modes, and adjust volume inline.
 - **Background blur control** – fine-tune the visual intensity or let hardware decoding decide when blur should be disabled.
+- **Stream-friendly** – paste a YouTube (or any yt-dlp supported) URL to play it instantly without a manual download.
 - **Persistent settings** – volume, blur, shuffle, and repeat preferences are stored via `QSettings` so they survive restarts.
 
 ## Quick Start
@@ -40,6 +55,7 @@ Install the following dependencies before building Drift Player:
 - **mpv** with the `libmpv` development headers
 - **CMake** 3.22 or newer
 - A C++20-capable compiler (GCC 11+, Clang 12+, MSVC 19.3+)
+- To stream online media (YouTube, Vimeo, etc.), ensure [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (or `youtube-dl`) is available on your PATH so mpv can resolve URLs.
 
 On Debian/Ubuntu:
 
@@ -110,6 +126,7 @@ The application creates a window titled _Drift Player_ and persists user setting
 ## Usage Highlights
 
 - **Add Media** – click the `Add Media` button to select one or more files; Drift Player automatically normalises and deduplicates paths before queuing tracks.
+- **Open URL** – choose `File → Open URL…` (or press <kbd>Ctrl</kbd>+<kbd>U</kbd>) to stream online media directly through mpv/yt-dlp without downloading the file first.
 - **Playback controls** – play/pause, next, previous, repeat mode toggle, and shuffle are available in the central control bar.
 - **Progress & seeking** – drag the position slider to scrub; the time label displays the current position and total duration.
 - **Visual tweaks** – adjust the blur slider to change the strength of the background blur; the slider is disabled when hardware decoding already applies blur.
