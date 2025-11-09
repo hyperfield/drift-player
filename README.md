@@ -73,6 +73,32 @@ cmake --build build
 
 The configured target name is `drift_player`, and the generated executable is placed at `build/Drift Player` (or `build/Drift Player.exe` on Windows).
 
+On Windows you can use the helper script which auto-detects a Qt 6 installation (Qt6_DIR, CMAKE_PREFIX_PATH, common `C:\Qt\6.x\msvc*` layouts) before invoking CMake:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/compile.ps1
+```
+
+For `libmpv`, the helper expects an MSYS2 installation (for example `C:\msys64`) with the appropriate mpv package installed (`mingw-w64-x86_64-mpv`, `mingw-w64-ucrt-x86_64-mpv`, or `mingw-w64-clang-x86_64-mpv` depending on the prefix). It copies the headers, converts the MSYS2 DLL into an MSVC-friendly import library (using `gendef` from the matching `binutils` package, or `dumpbin` as a fallback), and wires the resulting prefix into CMake automatically. Use `-MpvPath` to point at a custom mpv prefix, `-MsysRoot`/`-MsysSubdir` if your MSYS2 install lives elsewhere, `-QtPath` to override Qt detection, and `-Config`/`-NoBuild` to adjust the build step.
+
+#### Windows (MSYS2 Mingw) quick start
+
+1. Install MSYS2 from [msys2.org](https://www.msys2.org/) and update the environment.
+2. Inside the MSYS2 **UCRT64** (or the prefix you prefer) shell:
+   ```bash
+   pacman -S mingw-w64-ucrt-x86_64-mpv mingw-w64-ucrt-x86_64-binutils
+   ```
+   Replace `ucrt` with `x86_64` or `clang` if you target those prefixes.
+3. Make sure Qt 6 development files are available (Qt installer or a vcpkg-provided Qt).
+4. From a *Developer PowerShell for VS 2022* run:
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass `
+     -File scripts/compile.ps1 `
+     -CMake "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" `
+     -QtPath "C:\path\to\qt\share\Qt6"
+   ```
+   The script stages `libmpv`, runs CMake, builds the executables, and copies the required Qt and mpv DLLs (via `windeployqt` when available) into the build output directory so the binaries run immediately.
+
 ### Run
 
 ```bash
@@ -142,3 +168,9 @@ The project’s license has not yet been formally declared. Until a license is a
 ---
 
 _Enjoy the drift—feedback, issues, and pull requests are always appreciated._
+
+
+
+
+
+
