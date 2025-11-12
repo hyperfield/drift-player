@@ -173,7 +173,7 @@ Bug reports and feature ideas are welcome—please include OS, reproduction step
 
 ## License
 
-The project’s license has not yet been formally declared. Until a license is added, treat the sources as “all rights reserved.” If you plan to redistribute or build upon Drift Player, reach out to the project maintainers first.
+Drift Player is released under the [MIT License](./LICENSE). You are free to use, modify, and redistribute the software under the terms described there.
 
 ## Acknowledgements
 
@@ -185,7 +185,6 @@ The project’s license has not yet been formally declared. Until a license is a
 ---
 
 _Enjoy the drift—feedback, issues, and pull requests are always appreciated._
-
 
 
 
