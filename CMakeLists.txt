@@ -1,6 +1,39 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(DriftPlayer LANGUAGES CXX)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/app_version.hpp" APP_VERSION_HEADER)
+
+string(REGEX MATCH "#define[ \t]+DRIFT_APP_VERSION_MAJOR[ \t]+([0-9]+)"
+       _match_major "${APP_VERSION_HEADER}")
+if(NOT _match_major)
+    message(FATAL_ERROR "Unable to parse DRIFT_APP_VERSION_MAJOR from app_version.hpp")
+endif()
+set(DRIFT_APP_VERSION_MAJOR "${CMAKE_MATCH_1}")
+
+string(REGEX MATCH "#define[ \t]+DRIFT_APP_VERSION_MINOR[ \t]+([0-9]+)"
+       _match_minor "${APP_VERSION_HEADER}")
+if(NOT _match_minor)
+    message(FATAL_ERROR "Unable to parse DRIFT_APP_VERSION_MINOR from app_version.hpp")
+endif()
+set(DRIFT_APP_VERSION_MINOR "${CMAKE_MATCH_1}")
+
+string(REGEX MATCH "#define[ \t]+DRIFT_APP_VERSION_PATCH[ \t]+([0-9]+)"
+       _match_patch "${APP_VERSION_HEADER}")
+if(NOT _match_patch)
+    message(FATAL_ERROR "Unable to parse DRIFT_APP_VERSION_PATCH from app_version.hpp")
+endif()
+set(DRIFT_APP_VERSION_PATCH "${CMAKE_MATCH_1}")
+
+string(REGEX MATCH "#define[ \t]+DRIFT_APP_VERSION_STRING[ \t]+\"([^\"]+)\""
+       _match_string "${APP_VERSION_HEADER}")
+if(NOT _match_string)
+    message(FATAL_ERROR "Unable to parse DRIFT_APP_VERSION_STRING from app_version.hpp")
+endif()
+set(DRIFT_APP_VERSION_STRING "${CMAKE_MATCH_1}")
+
+set(DRIFT_APP_VERSION
+    "${DRIFT_APP_VERSION_MAJOR}.${DRIFT_APP_VERSION_MINOR}.${DRIFT_APP_VERSION_PATCH}")
+
+project(DriftPlayer VERSION ${DRIFT_APP_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
