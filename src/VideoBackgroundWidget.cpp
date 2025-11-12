@@ -529,7 +529,7 @@ void VideoBackgroundWidget::paintGL()
         spdlog::warn("mpv failed to render frame rc={}", renderRc);
         return;
     }
-    spdlog::debug("paintGL: rendered frame {}x{} blur={}", targetWidth, targetHeight, useBlur);
+    // spdlog::debug("paintGL: rendered frame {}x{} blur={}", targetWidth, targetHeight, useBlur);
 
     if (useBlur) {
         renderBlurPass();

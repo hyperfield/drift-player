@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 
 #include "MainWindow.h"
+#include "app_version.hpp"
 
 namespace
 {
@@ -27,7 +28,7 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("Drift Player");
-    QApplication::setApplicationVersion("dev");
+    QApplication::setApplicationVersion(QStringLiteral(DRIFT_APP_VERSION_STRING));
     QApplication::setOrganizationName("hyperfield");
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/driftplayer_256.png")));
 

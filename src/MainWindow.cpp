@@ -2,11 +2,13 @@
 
 #include "VideoBackgroundWidget.h"
 #include "BassVisualizerWidget.h"
+#include "app_version.hpp"
 
 #include <QAbstractItemView>
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QCursor>
+#include <QDate>
 #include <QDateTime>
 #include <QDialog>
 #include <QDir>
@@ -874,22 +876,56 @@ void MainWindow::handleShowAboutDrift()
     QMessageBox aboutBox(this);
     aboutBox.setWindowTitle(tr("About Drift Player"));
     aboutBox.setTextFormat(Qt::RichText);
-    QString version = QCoreApplication::applicationVersion();
-    if (version.isEmpty()) {
-        version = tr("Unknown version");
-    } else {
-        version = tr("Version %1").arg(version);
+    QString versionValue = QString::fromLatin1(drift::version::kVersionString);
+    if (versionValue.isEmpty()) {
+        versionValue = QCoreApplication::applicationVersion();
     }
 
-    const QString body = tr("<b>Drift Player</b><br/>%1<br/><br/>"
-                            "Ambient media player built with Qt and mpv.")
-                              .arg(version);
+    QString versionLabel;
+    if (versionValue.isEmpty()) {
+        versionValue = tr("Unknown");
+        versionLabel = tr("Unknown version");
+    } else {
+        versionLabel = tr("Version %1").arg(versionValue);
+    }
+
+    constexpr int kProjectStartYear = 2025;
+    const int currentYear = QDate::currentDate().year();
+    QString yearsDisplay = QString::number(kProjectStartYear);
+    if (currentYear > kProjectStartYear) {
+        yearsDisplay = tr("%1-%2").arg(kProjectStartYear).arg(currentYear);
+    }
+
+    const QString repositoryUrl = QStringLiteral("https://github.com/hyperfield/drift-player");
+    const QString headerSection = tr("<div><b>Drift Player</b><br/>%1<br/><br/>"
+                                     "Ambient media player built with Qt and mpv.</div>")
+                                      .arg(versionLabel);
+    const QString detailsSection = tr(
+        "<div style=\"text-align:left; display:inline-block; margin-top:12px;\">"
+        "<b>Version:</b> %1<br/>"
+        "<b>Author:</b> %2<br/>"
+        "<b>License:</b> <a href=\"%3\">MIT</a><br/>"
+        "<b>GitHub:</b> <a href=\"%4\">%5</a><br/>"
+        "<b>Years:</b> %6"
+        "</div>")
+                                       .arg(versionValue,
+                                            tr("hyperfield"),
+                                            QStringLiteral("https://opensource.org/licenses/MIT"),
+                                            repositoryUrl,
+                                            tr("hyperfield/drift-player"),
+                                            yearsDisplay);
+    const QString textSection = headerSection + detailsSection;
+    const QString logoSection = QStringLiteral(
+        "<div style=\"margin-bottom:12px;\"><img src=\":/images/logo.png\" width=\"160\"/></div>");
+    const QString body = QStringLiteral("<div style=\"text-align:center;\">%1%2</div>")
+                             .arg(logoSection, textSection);
     aboutBox.setText(body);
     if (!m_appIcon.isNull()) {
         aboutBox.setIconPixmap(m_appIcon.pixmap(64, 64));
     } else {
         aboutBox.setIcon(QMessageBox::Information);
     }
+    aboutBox.setTextInteractionFlags(Qt::TextBrowserInteraction);
     aboutBox.setStandardButtons(QMessageBox::Ok);
     aboutBox.exec();
 }
