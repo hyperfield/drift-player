@@ -46,3 +46,7 @@ install_manifest.txt
 .DS_Store
 Thumbs.db
 desktop.ini
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
