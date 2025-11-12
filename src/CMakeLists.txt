@@ -4,9 +4,11 @@ qt_add_executable(drift_player
     MainWindow.cpp
     VideoBackgroundWidget.cpp
     BassVisualizerWidget.cpp
+    JumpSlider.cpp
     ../include/MainWindow.h
     ../include/VideoBackgroundWidget.h
     ../include/BassVisualizerWidget.h
+    ../include/JumpSlider.h
 )
 
 qt_add_resources(drift_player_resources

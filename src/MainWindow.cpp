@@ -2,6 +2,7 @@
 
 #include "VideoBackgroundWidget.h"
 #include "BassVisualizerWidget.h"
+#include "JumpSlider.h"
 #include "app_version.hpp"
 
 #include <QAbstractItemView>
@@ -1797,7 +1798,7 @@ void MainWindow::setupUi()
     m_shuffleButton->setMinimumWidth(96);
     m_repeatButton->setMinimumWidth(124);
 
-    m_blurSlider = new QSlider(Qt::Horizontal, m_controlsContainer);
+    m_blurSlider = new JumpSlider(Qt::Horizontal, m_controlsContainer);
     m_blurSlider->setRange(0, 100);
     m_blurSlider->setValue(kDefaultBlur);
     m_blurSlider->setCursor(Qt::PointingHandCursor);
@@ -1832,7 +1833,7 @@ void MainWindow::setupUi()
         }
     )");
 
-    m_volumeSlider = new QSlider(Qt::Horizontal, m_controlsContainer);
+    m_volumeSlider = new JumpSlider(Qt::Horizontal, m_controlsContainer);
     m_volumeSlider->setRange(0, 100);
     m_volumeSlider->setValue(kDefaultVolume);
     m_volumeSlider->setToolTip(tr("Volume"));
