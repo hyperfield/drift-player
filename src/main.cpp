@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QDebug>
+#include <QGuiApplication>
 #include <QIcon>
 
 #include <clocale>
@@ -30,11 +31,18 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName("Drift Player");
     QApplication::setApplicationVersion(QStringLiteral(DRIFT_APP_VERSION_STRING));
     QApplication::setOrganizationName("hyperfield");
-    app.setWindowIcon(QIcon(QStringLiteral(":/icons/driftplayer_256.png")));
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    QGuiApplication::setDesktopFileName(QStringLiteral("drift-player.desktop"));
+#endif
+    const QIcon appIcon =
+        QIcon::fromTheme(QStringLiteral("drift-player"),
+                         QIcon(QStringLiteral(":/images/logo.png")));
+    app.setWindowIcon(appIcon);
 
     enforceCLocale(); // Qt may change it back; reapply
 
     MainWindow window;
+    window.setWindowIcon(appIcon);
     window.show();
 
     const int result = app.exec();

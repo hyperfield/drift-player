@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Drift Player
+Comment=Ambient media player built with Qt and mpv.
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/driftplayer
+Icon=drift-player
+Terminal=false
+Categories=AudioVideo;Player;
+StartupWMClass=drift-player
+Keywords=audio;video;player;mpv;ambience;

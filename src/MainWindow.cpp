@@ -85,6 +85,24 @@ constexpr qreal kInteractiveIdleOpacity = 0.55;
 constexpr int kInteractiveFadeDelayMs = 2000;
 constexpr int kCompactControlsThresholdPx = 960;
 
+bool looksLikeUrlLike(const QString &text)
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+    if (!trimmed.contains(QStringLiteral("://"))) {
+        return false;
+    }
+    // If there are obvious whitespace characters the string is likely a title, not a URL.
+    if (trimmed.contains(QChar(' ')) || trimmed.contains(QChar('\n'))) {
+        return false;
+    }
+
+    QUrl candidate(trimmed, QUrl::StrictMode);
+    return candidate.isValid() && !candidate.scheme().isEmpty();
+}
+
 QString displayNameForFile(const QString &filePath)
 {
     const QUrl url = QUrl::fromUserInput(filePath);
@@ -1011,12 +1029,22 @@ void MainWindow::handleMediaTitleChanged(const QString &title)
     const QString trimmed = title.trimmed();
     TrackEntry &entry = m_tracks[m_currentIndex];
 
+    const QString defaultDisplay = displayNameForFile(entry.filePath);
+    const QString rawFilename = QFileInfo(entry.filePath).fileName();
+
+    auto equalsInsensitive = [&](const QString &lhs, const QString &rhs) {
+        return lhs.compare(rhs, Qt::CaseInsensitive) == 0;
+    };
+
     if (!entry.isRemote) {
-        const QString defaultDisplay = displayNameForFile(entry.filePath);
-        const QString rawFilename = QFileInfo(entry.filePath).fileName();
-        if (trimmed.compare(defaultDisplay, Qt::CaseInsensitive) == 0
-            || trimmed.compare(rawFilename, Qt::CaseInsensitive) == 0) {
+        if (equalsInsensitive(trimmed, defaultDisplay) || equalsInsensitive(trimmed, rawFilename)) {
             return; // mpv reported the plain filename; keep our nicer title.
+        }
+    } else {
+        const QString normalizedPath = entry.normalizedPath;
+        if (equalsInsensitive(trimmed, entry.filePath) || equalsInsensitive(trimmed, normalizedPath)
+            || equalsInsensitive(trimmed, defaultDisplay) || looksLikeUrlLike(trimmed)) {
+            return; // ignore transitional URL-based titles coming from mpv/yt-dlp
         }
     }
 
@@ -2273,7 +2301,8 @@ void MainWindow::playTrack(int index)
         startMetadataFetch(index, true);
     }
 
-    m_videoWidget->setAutoStartOnLoad(restoringTrack ? m_restoreShouldPlay : true);
+    const bool shouldAutoPlay = restoringTrack ? m_restoreShouldPlay : true;
+    m_videoWidget->setAutoStartOnLoad(shouldAutoPlay);
 
     if (!m_videoWidget->loadFile(entry.filePath)) {
         spdlog::error("Failed to load track '{}'", entry.filePath);
@@ -2287,6 +2316,22 @@ void MainWindow::playTrack(int index)
             clearPendingRestore();
         }
         return;
+    }
+
+    if (shouldAutoPlay) {
+        m_videoWidget->play();
+        QTimer::singleShot(250, this, [this, index]() {
+            if (!m_videoWidget) {
+                return;
+            }
+            if (m_currentIndex != index) {
+                return;
+            }
+            if (m_videoWidget->hasMedia() && m_videoWidget->isPaused()) {
+                spdlog::debug("Auto-play retry for track index {}", index);
+                m_videoWidget->play();
+            }
+        });
     }
 
     m_currentIndex = index;

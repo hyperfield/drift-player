@@ -35,6 +35,8 @@ set(DRIFT_APP_VERSION
 
 project(DriftPlayer VERSION ${DRIFT_APP_VERSION} LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -104,3 +106,14 @@ if (NOT TARGET MPV::MPV)
 endif()
 
 add_subdirectory(src)
+
+if(UNIX AND NOT APPLE)
+    set(DRIFT_DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/drift-player.desktop")
+    configure_file(${CMAKE_SOURCE_DIR}/resources/linux/drift-player.desktop.in
+                   ${DRIFT_DESKTOP_FILE} @ONLY)
+    install(FILES ${DRIFT_DESKTOP_FILE}
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+    install(FILES ${CMAKE_SOURCE_DIR}/assets/images/logo.png
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/512x512/apps
+            RENAME drift-player.png)
+endif()

@@ -42,7 +42,7 @@ set_target_properties(drift_player PROPERTIES
 
 if (WIN32)
     set_property(TARGET drift_player APPEND PROPERTY WIN32_EXECUTABLE TRUE)
-    set(APP_ICON_PATH "${CMAKE_SOURCE_DIR}/assets/icons/driftplayer.ico")
+    set(APP_ICON_PATH "${CMAKE_SOURCE_DIR}/assets/icons/logo.ico")
     configure_file(${CMAKE_SOURCE_DIR}/resources/appicon.rc.in
                    ${CMAKE_BINARY_DIR}/appicon.rc @ONLY)
     target_sources(drift_player PRIVATE ${CMAKE_BINARY_DIR}/appicon.rc)
@@ -71,4 +71,13 @@ set_target_properties(drift_dialog_helper PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}
     RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}
+)
+
+install(TARGETS drift_player
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(TARGETS drift_dialog_helper
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

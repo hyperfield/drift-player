@@ -85,6 +85,8 @@ git clone https://github.com/hyperfield/drift-player.git
 cd drift-player
 cmake -S . -B build
 cmake --build build
+# optional: install binaries + desktop entry/icon
+cmake --install build --prefix ~/.local
 ```
 
 The configured target name is `drift_player`, and the generated executable is placed at `build/Drift Player` (or `build/Drift Player.exe` on Windows).
@@ -121,7 +123,7 @@ For `libmpv`, the helper expects an MSYS2 installation (for example `C:\msys64`)
 ./build/Drift\ Player
 ```
 
-The application creates a window titled _Drift Player_ and persists user settings under the organization `evoid`.
+The application creates a window titled _Drift Player_ and persists user settings under the organization `evoid`. On Linux, installing via `cmake --install build --prefix ~/.local` registers the `.desktop` file plus icon so GNOME/KDE display the proper logo in app grids and docks.
 
 ## Usage Highlights
 
@@ -185,7 +187,6 @@ Drift Player is released under the [MIT License](./LICENSE). You are free to use
 ---
 
 _Enjoy the drift—feedback, issues, and pull requests are always appreciated._
-
 
 
 
