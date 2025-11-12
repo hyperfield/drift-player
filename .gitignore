@@ -47,6 +47,8 @@ install_manifest.txt
 Thumbs.db
 desktop.ini
 
-
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
+
+# Development artifacts
+notes/

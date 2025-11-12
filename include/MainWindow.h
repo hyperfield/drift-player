@@ -6,23 +6,40 @@
 #include <QSettings>
 #include <QTimer>
 #include <QString>
+#include <QStringList>
 #include <QVector>
+#include <QQueue>
+#include <QFutureWatcher>
+#include <QVariantMap>
+#include <QIcon>
 
 class QListWidget;
 class QPushButton;
 class QSlider;
 class QLabel;
 class QToolButton;
+class QAction;
 class QListWidgetItem;
 class QGraphicsOpacityEffect;
 class QPropertyAnimation;
 class QWidget;
+class QHBoxLayout;
+class QGridLayout;
+class QResizeEvent;
+class QFileSystemWatcher;
+class QSlider;
+class QLabel;
+class BassVisualizerWidget;
+class QEvent;
 
 struct TrackEntry
 {
     QString title;
     QString filePath;
     QString normalizedPath;
+    double durationSeconds = -1.0;
+    bool isRemote = false;
+    QString platform;
 };
 
 enum class RepeatMode
@@ -44,6 +61,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
     void handleAddMedia();
@@ -54,6 +72,18 @@ private slots:
     void handlePlayPause();
     void handlePlayNext();
     void handlePlayPrevious();
+    void handleOpenUrl();
+    void handleLoadPlaylist();
+    void handleSavePlaylist();
+    void handleUndo();
+    void handleRedo();
+    void handleRemoveSelectedTrack();
+    void handleToggleCompactControls(bool checked);
+    void handleToggleFullscreen(bool checked);
+    void handleShowAboutDrift();
+    void handleShowAboutQt();
+    void handleMetadataChanged(const QVariantMap &metadata);
+    void handleMediaTitleChanged(const QString &title);
     void handlePlaylistActivated(QListWidgetItem *item);
     void handleShuffleToggled();
     void handleRepeatMode();
@@ -61,16 +91,21 @@ private slots:
     void handlePlaybackFinished();
     void handleVolumeChanged(int value);
     void handleBlurChanged(int value);
+    void handleBassThresholdChanged(int value);
     void handleProgressSliderPressed();
     void handleProgressSliderReleased();
     void handleProgressSliderMoved(int value);
     void handlePositionChanged(double position, double duration);
+    void handleWatchedFileChanged(const QString &path);
+    void handlePlaylistContextMenu(const QPoint &pos);
+    void handleDeleteTrackFromPlaylist();
+    void handleDeleteTrackFromDisk();
 
 private:
     void setupUi();
     void loadSettings();
     void saveSettings();
-    void addTrack(const QString &filePath);
+    bool addTrack(const QString &filePath);
     void processSelectedFiles(const QStringList &files);
     bool trackExists(const QString &filePath) const;
     void playTrack(int index);
@@ -79,7 +114,10 @@ private:
     void updatePlayPauseButton(bool playing);
     void updateRepeatButton();
     void updateNowPlaying(const QString &filePath);
+    void refreshPlaylistStyles();
     void updateTransportAvailability();
+    void updateControlsLayoutMode(bool compact);
+    void updateControlsLayoutMode();
     void setWidgetOpacity(QGraphicsOpacityEffect *effect, QPropertyAnimation *animation, qreal value, int durationMs = 250);
     bool handleFadeEvent(QObject *watched, QEvent *event, QWidget *container, QTimer &timer,
                          QGraphicsOpacityEffect *effect, QPropertyAnimation *animation);
@@ -87,6 +125,37 @@ private:
     [[nodiscard]] QString normalizedPathFor(const QString &filePath) const;
     [[nodiscard]] QString resolveDialogHelperPath() const;
     void cleanupAddDialogProcess();
+    void startWatchingTrack(const QString &normalizedPath);
+    void stopWatchingTrack(const QString &normalizedPath);
+    void removeTrackByNormalizedPath(const QString &normalizedPath);
+    void removeTrackAt(int index);
+    void restorePlaylistState();
+    void savePlaylistState();
+    void updatePlaylistItem(int index);
+    void enqueueDurationProbe(const QString &normalizedPath);
+    void processDurationQueue();
+    void finalizeDurationFor(const QString &normalizedPath, double seconds);
+    void logTracks(const char *tag) const;
+    void requestRemoveTrack(int index);
+    void updatePlaylistRowState(int index, QListWidgetItem *item);
+    void updateBassEffectState();
+    void refreshNextLabel();
+    void setNextLabelText(int nextIndex);
+    void invalidateNextIndexCache();
+    void restorePlaybackState();
+    [[nodiscard]] int indexForNormalizedPath(const QString &normalizedPath) const;
+    void clearPendingRestore();
+    void applyRestoredProgressToUi(double position, double durationSeconds);
+    void updateMenuAvailability();
+    [[nodiscard]] QString displayTitleForEntry(const TrackEntry &entry) const;
+    [[nodiscard]] QString displayTitleForIndex(int index) const;
+    void refreshNowPlayingLabel();
+    void updateTrackTitle(int index, const QString &title);
+    void addUrlToHistory(const QString &url);
+    void startMetadataFetch(int index, bool showErrors = false);
+
+protected:
+    void changeEvent(QEvent *event) override;
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -100,13 +169,43 @@ private:
     QToolButton *m_repeatButton = nullptr;
     QSlider *m_volumeSlider = nullptr;
     QSlider *m_blurSlider = nullptr;
+    QSlider *m_bassSlider = nullptr;
     QLabel *m_titleLabel = nullptr;
+    QLabel *m_blurLabel = nullptr;
+    QLabel *m_volumeLabel = nullptr;
+    QLabel *m_bassLabel = nullptr;
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
+    QLabel *m_nextLabel = nullptr;
+    QIcon m_appIcon;
+    QAction *m_loadPlaylistAction = nullptr;
+    QAction *m_savePlaylistAction = nullptr;
+    QAction *m_openUrlAction = nullptr;
+    QAction *m_addMediaAction = nullptr;
+    QAction *m_quitAction = nullptr;
+    QAction *m_aboutDriftAction = nullptr;
+    QAction *m_aboutQtAction = nullptr;
+    QAction *m_undoAction = nullptr;
+    QAction *m_redoAction = nullptr;
+    QAction *m_removeTrackAction = nullptr;
+    QAction *m_viewCompactAction = nullptr;
+    QAction *m_viewFullscreenAction = nullptr;
+    QAction *m_playAction = nullptr;
+    QAction *m_playNextAction = nullptr;
+    QAction *m_playPreviousAction = nullptr;
     QWidget *m_controlsContainer = nullptr;
     QWidget *m_progressContainer = nullptr;
+    QHBoxLayout *m_actionsLayout = nullptr;
+    QGridLayout *m_slidersLayout = nullptr;
+    QFileSystemWatcher *m_playlistWatcher = nullptr;
+    QFutureWatcher<double> *m_durationFutureWatcher = nullptr;
+    QQueue<QString> m_durationProbeQueue;
+    QString m_durationProbeCurrent;
+    BassVisualizerWidget *m_bassVisualizer = nullptr;
+    bool m_debugBassVisualizer = false;
 
     QVector<TrackEntry> m_tracks;
+    QStringList m_recentUrls;
     int m_currentIndex = -1;
     bool m_shuffleEnabled = false;
     RepeatMode m_repeatMode = RepeatMode::None;
@@ -126,4 +225,18 @@ private:
     bool m_addDialogOpen = false;
     QProcess *m_addDialogProcess = nullptr;
     QString m_addDialogTempFile;
+    bool m_compactControls = false;
+    bool m_compactOverrideEnabled = false;
+    bool m_compactOverrideValue = false;
+    bool m_isRestoringPlaylist = false;
+    QSet<QString> m_watchedPaths;
+    int m_contextMenuIndex = -1;
+    mutable bool m_nextIndexCacheValid = false;
+    mutable int m_nextIndexCache = -1;
+    bool m_restorePlaybackPending = false;
+    bool m_restorePositionApplied = false;
+    double m_restoreSeekTarget = 0.0;
+    bool m_restoreShouldPlay = false;
+    QString m_restoreNormalizedPath;
+    QSet<QString> m_metadataPending;
 };

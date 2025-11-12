@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QDebug>
+#include <QIcon>
 
 #include <clocale>
 
@@ -26,7 +27,9 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("Drift Player");
-    QApplication::setOrganizationName("evoid");
+    QApplication::setApplicationVersion("dev");
+    QApplication::setOrganizationName("hyperfield");
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/driftplayer_256.png")));
 
     enforceCLocale(); // Qt may change it back; reapply
 
