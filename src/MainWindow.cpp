@@ -47,6 +47,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QAction>
+#include <QActionGroup>
 #include <QMessageBox>
 #include <QGridLayout>
 #include <QGraphicsDropShadowEffect>
@@ -540,6 +541,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     resize(980, 640);
     setMinimumSize(880, 480);
+    m_selectedQualityId = qualityIdOrDefault(m_settings.value("stream/qualityPreset", m_selectedQualityId).toString());
     setupUi();
 
     m_playlistWatcher = new QFileSystemWatcher(this);
@@ -1140,6 +1142,8 @@ void MainWindow::handleProgressSliderPressed()
     m_progressSliderPressed = true;
     m_progressFadeTimer.stop();
     setWidgetOpacity(m_progressOpacity, m_progressFadeAnimation, kInteractiveActiveOpacity, 120);
+    const int sliderValue = m_progressSlider ? m_progressSlider->value() : -1;
+    spdlog::info("Progress slider pressed value={} duration={}", sliderValue, m_lastDuration);
 }
 
 void MainWindow::handleProgressSliderReleased()
@@ -1165,7 +1169,29 @@ void MainWindow::handleProgressSliderReleased()
 
     const double ratio = static_cast<double>(m_progressSlider->value()) / static_cast<double>(maxValue);
     const double targetPosition = ratio * m_lastDuration;
+    const bool resumePlayback = !m_videoWidget->isPaused();
+    const bool isRemote = (m_currentIndex >= 0 && m_currentIndex < m_tracks.size()) ? m_tracks.at(m_currentIndex).isRemote : false;
+    spdlog::info("Progress slider released value={} target={}s resume={} remote={}",
+                 m_progressSlider->value(),
+                 targetPosition,
+                 resumePlayback,
+                 isRemote);
     m_videoWidget->seek(targetPosition);
+    if (resumePlayback) {
+        m_videoWidget->play();
+        QTimer::singleShot(200, this, [this]() {
+            if (!m_videoWidget) {
+                return;
+            }
+            if (!m_videoWidget->hasMedia()) {
+                return;
+            }
+            if (m_videoWidget->isPaused()) {
+                spdlog::warn("Seek resume retry fired; stream still paused after seek");
+                m_videoWidget->play();
+            }
+        });
+    }
     if (m_timeLabel) {
         m_timeLabel->setText(QStringLiteral("%1 / %2")
                                  .arg(formatTime(targetPosition),
@@ -1188,6 +1214,7 @@ void MainWindow::handleProgressSliderMoved(int value)
 
     const double ratio = static_cast<double>(value) / static_cast<double>(maxValue);
     const double previewPosition = ratio * m_lastDuration;
+    spdlog::debug("Progress slider moved value={} preview={}s", value, previewPosition);
     m_timeLabel->setText(QStringLiteral("%1 / %2")
                              .arg(formatTime(previewPosition),
                                   formatTime(m_lastDuration)));
@@ -1527,6 +1554,20 @@ void MainWindow::setupUi()
     m_playNextAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Right));
     connect(m_playNextAction, &QAction::triggered, this, &MainWindow::handlePlayNext);
 
+    m_qualityMenu = playbackMenu->addMenu(tr("Quality"));
+    m_qualityActionGroup = new QActionGroup(this);
+    m_qualityActionGroup->setExclusive(true);
+    const auto presets = qualityPresets();
+    for (const QualityPreset &preset : presets) {
+        QAction *action = m_qualityMenu->addAction(preset.label);
+        action->setCheckable(true);
+        action->setData(preset.id);
+        m_qualityActionGroup->addAction(action);
+        connect(action, &QAction::triggered, this, &MainWindow::handleQualityActionTriggered);
+        m_qualityActions.insert(preset.id, action);
+    }
+    setPreferredQuality(m_selectedQualityId, false, false);
+
     QMenu *helpMenu = mainMenuBar->addMenu(tr("&Help"));
     m_aboutDriftAction = helpMenu->addAction(tr("About Drift Player"));
     connect(m_aboutDriftAction, &QAction::triggered, this, &MainWindow::handleShowAboutDrift);
@@ -1645,8 +1686,8 @@ void MainWindow::setupUi()
     m_progressContainer->setAttribute(Qt::WA_TranslucentBackground);
     m_progressContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
-    m_progressSlider = new QSlider(Qt::Horizontal, m_progressContainer);
-    m_progressSlider->setRange(0, 1000);
+    m_progressSlider = new JumpSlider(Qt::Horizontal, m_progressContainer);
+    m_progressSlider->setRange(0, 10000);
     m_progressSlider->setCursor(Qt::PointingHandCursor);
     m_progressSlider->setEnabled(false);
     m_progressSlider->setSingleStep(1);
@@ -2143,6 +2184,7 @@ void MainWindow::saveSettings()
     if (m_bassSlider) {
         m_settings.setValue("visual/bassThreshold", m_bassSlider->value());
     }
+    m_settings.setValue("stream/qualityPreset", m_selectedQualityId);
     savePlaylistState();
     if (m_currentIndex >= 0 && m_currentIndex < m_tracks.size()) {
         const TrackEntry &entry = m_tracks.at(m_currentIndex);
@@ -2299,6 +2341,7 @@ void MainWindow::playTrack(int index)
     }
 
     if (entry.isRemote) {
+        spdlog::info("playTrack: remote entry index={} url='{}'", index, entry.filePath.toStdString());
         startMetadataFetch(index, true);
     }
 
@@ -3164,6 +3207,128 @@ void MainWindow::startMetadataFetch(int index, bool showErrors)
     watcher->setFuture(QtConcurrent::run([url = entry.filePath]() {
         return fetchMetadataForRemote(url);
     }));
+}
+
+void MainWindow::handleQualityActionTriggered()
+{
+    QAction *action = qobject_cast<QAction *>(sender());
+    if (!action) {
+        return;
+    }
+    const QString id = action->data().toString();
+    setPreferredQuality(id, true);
+}
+
+void MainWindow::setPreferredQuality(const QString &qualityId, bool reloadCurrentTrack, bool persistSetting)
+{
+    const QString normalized = qualityIdOrDefault(qualityId);
+    if (normalized.isEmpty()) {
+        return;
+    }
+    if (normalized == m_selectedQualityId && !reloadCurrentTrack) {
+        if (persistSetting) {
+            m_settings.setValue("stream/qualityPreset", m_selectedQualityId);
+        }
+        return;
+    }
+    m_selectedQualityId = normalized;
+    updateQualityActionState();
+    applyQualityPreference(reloadCurrentTrack);
+    if (persistSetting) {
+        m_settings.setValue("stream/qualityPreset", m_selectedQualityId);
+        m_settings.sync();
+    }
+}
+
+void MainWindow::applyQualityPreference(bool reloadCurrentTrack)
+{
+    if (m_videoWidget) {
+        m_videoWidget->setYtdlFormat(formatExpressionForQuality(m_selectedQualityId));
+    }
+
+    if (!reloadCurrentTrack || !m_videoWidget || !m_videoWidget->hasMedia()) {
+        return;
+    }
+
+    if (m_currentIndex < 0 || m_currentIndex >= m_tracks.size()) {
+        return;
+    }
+
+    const TrackEntry &entry = m_tracks.at(m_currentIndex);
+    if (!entry.isRemote) {
+        return;
+    }
+
+    double targetPosition = 0.0;
+    bool shouldResume = true;
+    targetPosition = m_videoWidget->position();
+    if (!std::isfinite(targetPosition) || targetPosition < 0.0) {
+        targetPosition = 0.0;
+    }
+    shouldResume = !m_videoWidget->isPaused();
+
+    m_restoreNormalizedPath = entry.normalizedPath;
+    m_restoreSeekTarget = targetPosition;
+    m_restoreShouldPlay = shouldResume;
+    m_restorePlaybackPending = true;
+    m_restorePositionApplied = false;
+
+    playTrack(m_currentIndex);
+}
+
+void MainWindow::updateQualityActionState()
+{
+    if (!m_qualityActionGroup) {
+        return;
+    }
+    const QString normalized = qualityIdOrDefault(m_selectedQualityId);
+    for (auto it = m_qualityActions.cbegin(); it != m_qualityActions.cend(); ++it) {
+        if (QAction *action = it.value()) {
+            action->setChecked(it.key() == normalized);
+        }
+    }
+}
+
+QVector<QualityPreset> MainWindow::qualityPresets() const
+{
+    return {
+        {QStringLiteral("auto"), tr("Auto"), 0},
+        {QStringLiteral("2160p"), tr("2160p (4K)"), 2160},
+        {QStringLiteral("1440p"), tr("1440p"), 1440},
+        {QStringLiteral("1080p"), tr("1080p (Full HD)"), 1080},
+        {QStringLiteral("720p"), tr("720p (HD)"), 720},
+        {QStringLiteral("480p"), tr("480p"), 480},
+        {QStringLiteral("360p"), tr("360p"), 360}
+    };
+}
+
+QString MainWindow::qualityIdOrDefault(const QString &id) const
+{
+    if (id.isEmpty()) {
+        return QStringLiteral("720p");
+    }
+    const auto presets = qualityPresets();
+    for (const QualityPreset &preset : presets) {
+        if (preset.id.compare(id, Qt::CaseInsensitive) == 0) {
+            return preset.id;
+        }
+    }
+    return QStringLiteral("720p");
+}
+
+QString MainWindow::formatExpressionForQuality(const QString &qualityId) const
+{
+    const QString normalized = qualityIdOrDefault(qualityId);
+    if (normalized == QLatin1String("auto")) {
+        return QStringLiteral("bestvideo+bestaudio/best");
+    }
+    const auto presets = qualityPresets();
+    for (const QualityPreset &preset : presets) {
+        if (preset.id == normalized && preset.maxHeight > 0) {
+            return QStringLiteral("bestvideo[height<=%1]+bestaudio/best[height<=%1]/best").arg(preset.maxHeight);
+        }
+    }
+    return QStringLiteral("bestvideo+bestaudio/best");
 }
 
 void MainWindow::updatePlayPauseButton(bool playing)

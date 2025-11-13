@@ -28,6 +28,9 @@ struct MpvEventPayload
     QByteArray propertyName;
     mpv_format format = MPV_FORMAT_NONE;
     int endFileReason = -1;
+    QByteArray logPrefix;
+    QByteArray logLevel;
+    QByteArray logText;
 };
 
 class VideoBackgroundWidget : public QOpenGLWidget, protected QOpenGLFunctions
@@ -49,6 +52,7 @@ public:
     void setBassThreshold(double threshold);
     void setBassEnabled(bool enabled);
     void setAutoStartOnLoad(bool autoStart);
+    void setYtdlFormat(const QString &format);
     void requestFrame();
 
     [[nodiscard]] bool hasMedia() const;
@@ -120,6 +124,7 @@ private:
     QString m_mpvShaderPath;
     bool m_mpvShaderActive = false;
     bool m_autoStartOnLoad = true;
+    QString m_ytdlFormat = QStringLiteral("bestvideo+bestaudio/best");
     QTimer m_positionTimer;
     bool m_ignoreStopEndFile = false;
     QTimer m_bassTimer;

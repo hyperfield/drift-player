@@ -133,6 +133,7 @@ The application creates a window titled _Drift Player_ and persists user setting
 - **Progress & seeking** – drag the position slider to scrub; the time label displays the current position and total duration.
 - **Visual tweaks** – adjust the blur slider to change the strength of the background blur; the slider is disabled when hardware decoding already applies blur.
 - **Fade interactions** – moving the cursor over playlists or controls temporarily raises their opacity; the panels fade after inactivity.
+- **Quality selector** – choose `Playback → Quality` to pin streaming videos to Auto, 4K, 1440p, 1080p, 720p (default), 480p, or 360p without leaving the app.
 
 Keyboard shortcuts (default Qt behaviors) such as <kbd>Space</kbd> for play/pause also work.
 
@@ -187,7 +188,6 @@ Drift Player is released under the [MIT License](./LICENSE). You are free to use
 ---
 
 _Enjoy the drift—feedback, issues, and pull requests are always appreciated._
-
 
 
 

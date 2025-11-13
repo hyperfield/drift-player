@@ -12,6 +12,8 @@
 #include <QFutureWatcher>
 #include <QVariantMap>
 #include <QIcon>
+#include <QActionGroup>
+#include <QHash>
 
 class QListWidget;
 class QPushButton;
@@ -19,6 +21,7 @@ class QSlider;
 class QLabel;
 class QToolButton;
 class QAction;
+class QMenu;
 class QListWidgetItem;
 class QGraphicsOpacityEffect;
 class QPropertyAnimation;
@@ -40,6 +43,13 @@ struct TrackEntry
     double durationSeconds = -1.0;
     bool isRemote = false;
     QString platform;
+};
+
+struct QualityPreset
+{
+    QString id;
+    QString label;
+    int maxHeight = 0; // 0 = auto/best
 };
 
 enum class RepeatMode
@@ -95,6 +105,7 @@ private slots:
     void handleProgressSliderPressed();
     void handleProgressSliderReleased();
     void handleProgressSliderMoved(int value);
+    void handleQualityActionTriggered();
     void handlePositionChanged(double position, double duration);
     void handleWatchedFileChanged(const QString &path);
     void handlePlaylistContextMenu(const QPoint &pos);
@@ -153,6 +164,12 @@ private:
     void updateTrackTitle(int index, const QString &title);
     void addUrlToHistory(const QString &url);
     void startMetadataFetch(int index, bool showErrors = false);
+    void setPreferredQuality(const QString &qualityId, bool reloadCurrentTrack, bool persistSetting = true);
+    void applyQualityPreference(bool reloadCurrentTrack);
+    void updateQualityActionState();
+    QVector<QualityPreset> qualityPresets() const;
+    QString qualityIdOrDefault(const QString &id) const;
+    QString formatExpressionForQuality(const QString &qualityId) const;
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -176,6 +193,9 @@ protected:
     QLabel *m_bassLabel = nullptr;
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
+    QMenu *m_qualityMenu = nullptr;
+    QActionGroup *m_qualityActionGroup = nullptr;
+    QHash<QString, QAction *> m_qualityActions;
     QLabel *m_nextLabel = nullptr;
     QIcon m_appIcon;
     QAction *m_loadPlaylistAction = nullptr;
@@ -210,6 +230,7 @@ protected:
     bool m_shuffleEnabled = false;
     RepeatMode m_repeatMode = RepeatMode::None;
     QSettings m_settings;
+    QString m_selectedQualityId = QStringLiteral("720p");
     QGraphicsOpacityEffect *m_playlistOpacity = nullptr;
     QPropertyAnimation *m_playlistFadeAnimation = nullptr;
     QTimer m_playlistFadeTimer;

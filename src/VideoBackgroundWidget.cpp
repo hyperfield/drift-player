@@ -22,6 +22,7 @@
 #include <QVariant>
 #include <QVariantMap>
 #include <QVariantList>
+#include <QString>
 
 #include <spdlog/spdlog.h>
 
@@ -194,6 +195,19 @@ void MpvEventWorker::process()
             auto *end = static_cast<mpv_event_end_file *>(event->data);
             if (end) {
                 payload.endFileReason = static_cast<int>(end->reason);
+            }
+        } else if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
+            auto *log = static_cast<mpv_event_log_message *>(event->data);
+            if (log) {
+                if (log->prefix) {
+                    payload.logPrefix = QByteArray(log->prefix);
+                }
+                if (log->level) {
+                    payload.logLevel = QByteArray(log->level);
+                }
+                if (log->text) {
+                    payload.logText = QByteArray(log->text);
+                }
             }
         }
 
@@ -409,6 +423,26 @@ void VideoBackgroundWidget::setAutoStartOnLoad(bool autoStart)
     m_autoStartOnLoad = autoStart;
 }
 
+void VideoBackgroundWidget::setYtdlFormat(const QString &format)
+{
+    QString normalized = format.trimmed();
+    if (normalized.isEmpty()) {
+        normalized = QStringLiteral("bestvideo+bestaudio/best");
+    }
+    if (normalized == m_ytdlFormat) {
+        return;
+    }
+    m_ytdlFormat = normalized;
+    if (m_mpv) {
+        QByteArray value = m_ytdlFormat.toUtf8();
+        if (mpv_set_property_string(m_mpv, "ytdl-format", value.constData()) < 0) {
+            spdlog::warn("Failed to set ytdl-format to '{}'", m_ytdlFormat.toStdString());
+        } else {
+            spdlog::info("Updated ytdl-format to '{}'", m_ytdlFormat.toStdString());
+        }
+    }
+}
+
 void VideoBackgroundWidget::requestFrame()
 {
     spdlog::debug("VideoBackgroundWidget::requestFrame() scheduling update");
@@ -478,11 +512,14 @@ void VideoBackgroundWidget::seek(double seconds)
         seconds = 0.0;
     }
 
-    const int rc = mpv_set_property(m_mpv, "time-pos", MPV_FORMAT_DOUBLE, &seconds);
+    spdlog::info("VideoBackgroundWidget::seek -> {}s", seconds);
+    QByteArray secondsArg = QByteArray::number(seconds, 'f', 4);
+    const char *cmd[] = {"seek", secondsArg.constData(), "absolute", "keyframes", nullptr};
+    const int rc = mpv_command(m_mpv, cmd);
     if (rc < 0) {
         spdlog::warn("Failed to seek to {} (rc={})", seconds, rc);
     } else {
-        spdlog::debug("Seek requested to {} (rc={})", seconds, rc);
+        spdlog::debug("Seek command issued to {} (rc={})", seconds, rc);
     }
 }
 
@@ -619,12 +656,23 @@ void VideoBackgroundWidget::initializeMpv()
     mpv_set_option_string(m_mpv, "osc", "no");
     mpv_set_option_string(m_mpv, "force-window", "no");
     mpv_set_option_string(m_mpv, "hwdec", "auto-safe");
+    mpv_set_option_string(m_mpv, "ytdl", "yes");
+    QByteArray formatUtf8 = m_ytdlFormat.toUtf8();
+    mpv_set_option_string(m_mpv, "ytdl-format", formatUtf8.constData());
+    mpv_set_option_string(m_mpv, "hr-seek", "yes");
+    mpv_set_option_string(m_mpv, "demuxer-seekable-cache", "yes");
+    mpv_set_option_string(m_mpv, "demuxer-max-bytes", "200M");
+    mpv_set_option_string(m_mpv, "demuxer-readahead-secs", "30");
 
     if (mpv_initialize(m_mpv) < 0) {
         spdlog::error("Failed to initialize mpv");
         mpv_terminate_destroy(m_mpv);
         m_mpv = nullptr;
         return;
+    }
+
+    if (mpv_request_log_messages(m_mpv, "debug") < 0) {
+        spdlog::warn("Unable to request mpv log messages");
     }
 
     stopMpvEventThread();
@@ -695,6 +743,39 @@ void VideoBackgroundWidget::handleMpvEventPayload(const MpvEventPayload &payload
 void VideoBackgroundWidget::handleMpvEvent(const MpvEventPayload &payload)
 {
     switch (payload.id) {
+    case MPV_EVENT_LOG_MESSAGE: {
+        QString prefix = QString::fromUtf8(payload.logPrefix);
+        QString level = QString::fromUtf8(payload.logLevel);
+        QString text = QString::fromUtf8(payload.logText);
+        if (!text.isEmpty()) {
+            text = text.trimmed();
+        }
+        if (text.isEmpty()) {
+            break;
+        }
+
+        QString line = QStringLiteral("[%1] %2").arg(prefix, text);
+        const std::string message = line.toStdString();
+        const QByteArray levelLower = payload.logLevel.toLower();
+        if (levelLower == "error" || levelLower == "fatal") {
+            spdlog::error("[mpv] {}", message);
+        } else if (levelLower == "warn") {
+            spdlog::warn("[mpv] {}", message);
+        } else if (levelLower == "info") {
+            spdlog::info("[mpv] {}", message);
+        } else {
+            spdlog::debug("[mpv] {}", message);
+        }
+        break;
+    }
+    case MPV_EVENT_SEEK: {
+        spdlog::info("MPV_EVENT_SEEK (path='{}')", m_currentPath.toStdString());
+        break;
+    }
+    case MPV_EVENT_PLAYBACK_RESTART: {
+        spdlog::info("MPV_EVENT_PLAYBACK_RESTART (path='{}' paused={})", m_currentPath.toStdString(), m_isPaused);
+        break;
+    }
     case MPV_EVENT_FILE_LOADED: {
         spdlog::debug("MPV_EVENT_FILE_LOADED path='{}' autoStart={}", m_currentPath.toStdString(), m_autoStartOnLoad);
         double duration = 0.0;
